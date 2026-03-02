@@ -1,0 +1,1320 @@
+{
+  "calledNumbers": [
+    5,
+    7,
+    15,
+    23,
+    56,
+    55,
+    34,
+    38,
+    10,
+    19,
+    1,
+    49,
+    69,
+    73,
+    27,
+    29,
+    68,
+    51,
+    74,
+    64,
+    50,
+    59,
+    14,
+    21,
+    17,
+    46,
+    28,
+    66,
+    45,
+    22,
+    39,
+    25,
+    72
+  ],
+  "currentNumber": 72,
+  "isAnimating": false,
+  "gameMode": "line",
+  "winners": [
+    "20-line",
+    "28-line"
+  ],
+  "lastBalls": [
+    21,
+    17,
+    46,
+    28,
+    66,
+    45,
+    22,
+    39,
+    25,
+    72
+  ],
+  "ballCount": 67,
+  "cardPrice": 10,
+  "totalPrize": 80,
+  "selectedFigure": "X",
+  "cardsGenerated": true,
+  "nextCardSerial": 29,
+  "cards": [
+    {
+      "index": "21",
+      "name": "Tiff",
+      "price": 10,
+      "numbers": [
+        {
+          "row": "0",
+          "col": "0",
+          "text": "15",
+          "marked": true
+        },
+        {
+          "row": "0",
+          "col": "1",
+          "text": "27",
+          "marked": true
+        },
+        {
+          "row": "0",
+          "col": "2",
+          "text": "40",
+          "marked": false
+        },
+        {
+          "row": "0",
+          "col": "3",
+          "text": "55",
+          "marked": true
+        },
+        {
+          "row": "0",
+          "col": "4",
+          "text": "71",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "0",
+          "text": "3",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "1",
+          "text": "22",
+          "marked": true
+        },
+        {
+          "row": "1",
+          "col": "2",
+          "text": "32",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "3",
+          "text": "53",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "4",
+          "text": "67",
+          "marked": false
+        },
+        {
+          "row": "2",
+          "col": "0",
+          "text": "1",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "1",
+          "text": "24",
+          "marked": false
+        },
+        {
+          "row": "2",
+          "col": "2",
+          "text": "FREE",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "3",
+          "text": "59",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "4",
+          "text": "63",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "0",
+          "text": "8",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "1",
+          "text": "16",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "2",
+          "text": "35",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "3",
+          "text": "56",
+          "marked": true
+        },
+        {
+          "row": "3",
+          "col": "4",
+          "text": "65",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "0",
+          "text": "5",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "1",
+          "text": "17",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "2",
+          "text": "44",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "3",
+          "text": "50",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "4",
+          "text": "73",
+          "marked": true
+        }
+      ]
+    },
+    {
+      "index": "22",
+      "name": "Tiff",
+      "price": 10,
+      "numbers": [
+        {
+          "row": "0",
+          "col": "0",
+          "text": "14",
+          "marked": true
+        },
+        {
+          "row": "0",
+          "col": "1",
+          "text": "21",
+          "marked": true
+        },
+        {
+          "row": "0",
+          "col": "2",
+          "text": "43",
+          "marked": false
+        },
+        {
+          "row": "0",
+          "col": "3",
+          "text": "54",
+          "marked": false
+        },
+        {
+          "row": "0",
+          "col": "4",
+          "text": "61",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "0",
+          "text": "11",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "1",
+          "text": "20",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "2",
+          "text": "31",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "3",
+          "text": "52",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "4",
+          "text": "66",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "0",
+          "text": "6",
+          "marked": false
+        },
+        {
+          "row": "2",
+          "col": "1",
+          "text": "29",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "2",
+          "text": "FREE",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "3",
+          "text": "49",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "4",
+          "text": "74",
+          "marked": true
+        },
+        {
+          "row": "3",
+          "col": "0",
+          "text": "2",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "1",
+          "text": "18",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "2",
+          "text": "45",
+          "marked": true
+        },
+        {
+          "row": "3",
+          "col": "3",
+          "text": "57",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "4",
+          "text": "69",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "0",
+          "text": "13",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "1",
+          "text": "26",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "2",
+          "text": "37",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "3",
+          "text": "46",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "4",
+          "text": "64",
+          "marked": true
+        }
+      ]
+    },
+    {
+      "index": "23",
+      "name": "Leo",
+      "price": 10,
+      "numbers": [
+        {
+          "row": "0",
+          "col": "0",
+          "text": "9",
+          "marked": false
+        },
+        {
+          "row": "0",
+          "col": "1",
+          "text": "28",
+          "marked": true
+        },
+        {
+          "row": "0",
+          "col": "2",
+          "text": "41",
+          "marked": false
+        },
+        {
+          "row": "0",
+          "col": "3",
+          "text": "51",
+          "marked": true
+        },
+        {
+          "row": "0",
+          "col": "4",
+          "text": "70",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "0",
+          "text": "7",
+          "marked": true
+        },
+        {
+          "row": "1",
+          "col": "1",
+          "text": "23",
+          "marked": true
+        },
+        {
+          "row": "1",
+          "col": "2",
+          "text": "42",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "3",
+          "text": "48",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "4",
+          "text": "75",
+          "marked": false
+        },
+        {
+          "row": "2",
+          "col": "0",
+          "text": "10",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "1",
+          "text": "19",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "2",
+          "text": "FREE",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "3",
+          "text": "47",
+          "marked": false
+        },
+        {
+          "row": "2",
+          "col": "4",
+          "text": "62",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "0",
+          "text": "12",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "1",
+          "text": "25",
+          "marked": true
+        },
+        {
+          "row": "3",
+          "col": "2",
+          "text": "33",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "3",
+          "text": "60",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "4",
+          "text": "68",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "0",
+          "text": "4",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "1",
+          "text": "30",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "2",
+          "text": "38",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "3",
+          "text": "58",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "4",
+          "text": "72",
+          "marked": true
+        }
+      ]
+    },
+    {
+      "index": "24",
+      "name": "Leo",
+      "price": 10,
+      "numbers": [
+        {
+          "row": "0",
+          "col": "0",
+          "text": "4",
+          "marked": false
+        },
+        {
+          "row": "0",
+          "col": "1",
+          "text": "28",
+          "marked": true
+        },
+        {
+          "row": "0",
+          "col": "2",
+          "text": "39",
+          "marked": true
+        },
+        {
+          "row": "0",
+          "col": "3",
+          "text": "55",
+          "marked": true
+        },
+        {
+          "row": "0",
+          "col": "4",
+          "text": "71",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "0",
+          "text": "10",
+          "marked": true
+        },
+        {
+          "row": "1",
+          "col": "1",
+          "text": "27",
+          "marked": true
+        },
+        {
+          "row": "1",
+          "col": "2",
+          "text": "43",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "3",
+          "text": "53",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "4",
+          "text": "74",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "0",
+          "text": "15",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "1",
+          "text": "17",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "2",
+          "text": "FREE",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "3",
+          "text": "60",
+          "marked": false
+        },
+        {
+          "row": "2",
+          "col": "4",
+          "text": "75",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "0",
+          "text": "2",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "1",
+          "text": "16",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "2",
+          "text": "41",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "3",
+          "text": "57",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "4",
+          "text": "63",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "0",
+          "text": "7",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "1",
+          "text": "22",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "2",
+          "text": "42",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "3",
+          "text": "58",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "4",
+          "text": "66",
+          "marked": true
+        }
+      ]
+    },
+    {
+      "index": "25",
+      "name": "Leo",
+      "price": 10,
+      "numbers": [
+        {
+          "row": "0",
+          "col": "0",
+          "text": "5",
+          "marked": true
+        },
+        {
+          "row": "0",
+          "col": "1",
+          "text": "19",
+          "marked": true
+        },
+        {
+          "row": "0",
+          "col": "2",
+          "text": "45",
+          "marked": true
+        },
+        {
+          "row": "0",
+          "col": "3",
+          "text": "51",
+          "marked": true
+        },
+        {
+          "row": "0",
+          "col": "4",
+          "text": "67",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "0",
+          "text": "6",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "1",
+          "text": "21",
+          "marked": true
+        },
+        {
+          "row": "1",
+          "col": "2",
+          "text": "34",
+          "marked": true
+        },
+        {
+          "row": "1",
+          "col": "3",
+          "text": "47",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "4",
+          "text": "64",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "0",
+          "text": "13",
+          "marked": false
+        },
+        {
+          "row": "2",
+          "col": "1",
+          "text": "26",
+          "marked": false
+        },
+        {
+          "row": "2",
+          "col": "2",
+          "text": "FREE",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "3",
+          "text": "49",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "4",
+          "text": "62",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "0",
+          "text": "14",
+          "marked": true
+        },
+        {
+          "row": "3",
+          "col": "1",
+          "text": "18",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "2",
+          "text": "32",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "3",
+          "text": "54",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "4",
+          "text": "68",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "0",
+          "text": "1",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "1",
+          "text": "23",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "2",
+          "text": "31",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "3",
+          "text": "46",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "4",
+          "text": "61",
+          "marked": false
+        }
+      ]
+    },
+    {
+      "index": "26",
+      "name": "Leo",
+      "price": 10,
+      "numbers": [
+        {
+          "row": "0",
+          "col": "0",
+          "text": "9",
+          "marked": false
+        },
+        {
+          "row": "0",
+          "col": "1",
+          "text": "25",
+          "marked": true
+        },
+        {
+          "row": "0",
+          "col": "2",
+          "text": "44",
+          "marked": false
+        },
+        {
+          "row": "0",
+          "col": "3",
+          "text": "48",
+          "marked": false
+        },
+        {
+          "row": "0",
+          "col": "4",
+          "text": "69",
+          "marked": true
+        },
+        {
+          "row": "1",
+          "col": "0",
+          "text": "3",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "1",
+          "text": "30",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "2",
+          "text": "36",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "3",
+          "text": "52",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "4",
+          "text": "70",
+          "marked": false
+        },
+        {
+          "row": "2",
+          "col": "0",
+          "text": "11",
+          "marked": false
+        },
+        {
+          "row": "2",
+          "col": "1",
+          "text": "20",
+          "marked": false
+        },
+        {
+          "row": "2",
+          "col": "2",
+          "text": "FREE",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "3",
+          "text": "56",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "4",
+          "text": "65",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "0",
+          "text": "8",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "1",
+          "text": "29",
+          "marked": true
+        },
+        {
+          "row": "3",
+          "col": "2",
+          "text": "40",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "3",
+          "text": "59",
+          "marked": true
+        },
+        {
+          "row": "3",
+          "col": "4",
+          "text": "72",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "0",
+          "text": "12",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "1",
+          "text": "24",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "2",
+          "text": "38",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "3",
+          "text": "50",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "4",
+          "text": "73",
+          "marked": true
+        }
+      ]
+    },
+    {
+      "index": "27",
+      "name": "Yvan",
+      "price": 10,
+      "numbers": [
+        {
+          "row": "0",
+          "col": "0",
+          "text": "4",
+          "marked": false
+        },
+        {
+          "row": "0",
+          "col": "1",
+          "text": "19",
+          "marked": true
+        },
+        {
+          "row": "0",
+          "col": "2",
+          "text": "40",
+          "marked": false
+        },
+        {
+          "row": "0",
+          "col": "3",
+          "text": "57",
+          "marked": false
+        },
+        {
+          "row": "0",
+          "col": "4",
+          "text": "75",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "0",
+          "text": "2",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "1",
+          "text": "28",
+          "marked": true
+        },
+        {
+          "row": "1",
+          "col": "2",
+          "text": "43",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "3",
+          "text": "56",
+          "marked": true
+        },
+        {
+          "row": "1",
+          "col": "4",
+          "text": "64",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "0",
+          "text": "5",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "1",
+          "text": "24",
+          "marked": false
+        },
+        {
+          "row": "2",
+          "col": "2",
+          "text": "FREE",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "3",
+          "text": "52",
+          "marked": false
+        },
+        {
+          "row": "2",
+          "col": "4",
+          "text": "71",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "0",
+          "text": "8",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "1",
+          "text": "18",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "2",
+          "text": "45",
+          "marked": true
+        },
+        {
+          "row": "3",
+          "col": "3",
+          "text": "54",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "4",
+          "text": "65",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "0",
+          "text": "9",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "1",
+          "text": "23",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "2",
+          "text": "33",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "3",
+          "text": "59",
+          "marked": true
+        },
+        {
+          "row": "4",
+          "col": "4",
+          "text": "61",
+          "marked": false
+        }
+      ]
+    },
+    {
+      "index": "28",
+      "name": "Yvan",
+      "price": 10,
+      "numbers": [
+        {
+          "row": "0",
+          "col": "0",
+          "text": "11",
+          "marked": false
+        },
+        {
+          "row": "0",
+          "col": "1",
+          "text": "29",
+          "marked": true
+        },
+        {
+          "row": "0",
+          "col": "2",
+          "text": "41",
+          "marked": false
+        },
+        {
+          "row": "0",
+          "col": "3",
+          "text": "60",
+          "marked": false
+        },
+        {
+          "row": "0",
+          "col": "4",
+          "text": "73",
+          "marked": true
+        },
+        {
+          "row": "1",
+          "col": "0",
+          "text": "6",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "1",
+          "text": "26",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "2",
+          "text": "38",
+          "marked": true
+        },
+        {
+          "row": "1",
+          "col": "3",
+          "text": "47",
+          "marked": false
+        },
+        {
+          "row": "1",
+          "col": "4",
+          "text": "67",
+          "marked": false
+        },
+        {
+          "row": "2",
+          "col": "0",
+          "text": "15",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "1",
+          "text": "27",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "2",
+          "text": "FREE",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "3",
+          "text": "51",
+          "marked": true
+        },
+        {
+          "row": "2",
+          "col": "4",
+          "text": "72",
+          "marked": true
+        },
+        {
+          "row": "3",
+          "col": "0",
+          "text": "3",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "1",
+          "text": "25",
+          "marked": true
+        },
+        {
+          "row": "3",
+          "col": "2",
+          "text": "32",
+          "marked": false
+        },
+        {
+          "row": "3",
+          "col": "3",
+          "text": "55",
+          "marked": true
+        },
+        {
+          "row": "3",
+          "col": "4",
+          "text": "70",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "0",
+          "text": "12",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "1",
+          "text": "30",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "2",
+          "text": "37",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "3",
+          "text": "48",
+          "marked": false
+        },
+        {
+          "row": "4",
+          "col": "4",
+          "text": "69",
+          "marked": true
+        }
+      ]
+    }
+  ]
+}
