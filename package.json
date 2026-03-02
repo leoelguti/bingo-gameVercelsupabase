@@ -1,0 +1,22 @@
+{
+  "name": "bingo-game",
+  "version": "1.0.0",
+  "description": "A Bingo game project with interactive features and sound effects.",
+  "main": "src/script.js",
+  "scripts": {
+    "start": "live-server src",
+    "build": "echo 'Build step not defined'"
+  },
+  "keywords": [
+    "bingo",
+    "game",
+    "javascript",
+    "html",
+    "css"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "live-server": "^1.2.1"
+  }
+}

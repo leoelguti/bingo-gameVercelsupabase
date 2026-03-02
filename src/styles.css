@@ -1,0 +1,142 @@
+/* This file contains the CSS styles for the Bingo game */
+
+body {
+    background-color: #1f2937;
+    font-family: 'Roboto', sans-serif;
+    color: white;
+    margin: 0;
+    padding: 0;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.number-circle {
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    background-color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 4rem;
+    margin: 20px auto;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    color: black; /* Cambiar el color de los números a negro */
+}
+
+.ball {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    color: white;
+    background-color: #0284c7;
+    transition: background-color 0.3s;
+}
+
+.ball.called {
+    background-color: #dc2626;
+}
+
+.bingo-card {
+    background: #8B0000;
+    padding: 10px;
+    border-radius: 8px;
+    margin: 10px;
+    display: inline-block;
+}
+
+.bingo-header {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 2px;
+    margin-bottom: 2px;
+}
+
+.bingo-header div {
+    background: #FF8C00;
+    color: white;
+    padding: 5px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.bingo-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 2px;
+}
+
+.bingo-cell {
+    background: #f0f0f0; /* Cambiar el color de fondo de las celdas */
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    color: black; /* Cambiar el color de los números a negro */
+}
+
+.bingo-cell.free {
+    background: #FFD700;
+}
+
+.bingo-cell.marked {
+    background: #90EE90;
+}
+
+#lastBalls, #ballCount {
+    background: #4B5563;
+    padding: 10px;
+    border-radius: 8px;
+    margin: 10px 0;
+}
+
+#lastBallsList {
+    display: flex;
+    gap: 10px;
+}
+
+.hidden {
+    display: none;
+}
+
+.prize-box {
+    width: 50%;
+    height: auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.prize-box.visible {
+    display: block;
+}
+
+.card-name-input {
+    width: 100%;
+    padding: 5px;
+    margin-top: 5px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    color: black; /* Cambiar el color del texto a negro */
+}
+
+button {
+    cursor: pointer;
+}
+
+button:focus {
+    outline: none;
+}
