@@ -4,7 +4,7 @@
   "description": "A Bingo game project with interactive features and sound effects.",
   "main": "src/script.js",
   "scripts": {
-    "start": "live-server src",
+    "start": "node server.js",
     "build": "echo 'Build step not defined'"
   },
   "keywords": [
