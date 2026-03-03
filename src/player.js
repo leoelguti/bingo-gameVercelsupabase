@@ -770,7 +770,7 @@ async function checkoutCart() {
             bingoChannel.send({
                 type: 'broadcast',
                 event: 'card-purchased',
-                payload: { serial, status: 'reserved', buyerName: playerDisplayName, timestamp: reservedAt }
+                payload: { serial, status: 'reserved', buyerDbName: playerName, buyerName: playerDisplayName, timestamp: reservedAt }
             });
         });
 
@@ -1061,6 +1061,7 @@ document.getElementById('submitPaymentBtn').addEventListener('click', async () =
                 payload: {
                     serial,
                     status: 'payment_sent',
+                    buyerDbName: playerName,
                     buyerName: playerDisplayName,
                     paymentData: { method: paymentMethod, ref: referenceNumber, amount: totalAmount }
                 }

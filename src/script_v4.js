@@ -1076,13 +1076,20 @@ document.addEventListener('DOMContentLoaded', () => {
         // Agrupar por comprador
         const grouped = {};
         entries.forEach(([serial, p]) => {
-            if (!grouped[p.buyer]) {
-                grouped[p.buyer] = { buyer: p.buyer, cards: [], paymentData: null, hasPaymentSent: false };
+            const groupKey = p.buyerDbName || p.buyer; // Usar el internal name para agrupar
+            if (!grouped[groupKey]) {
+                grouped[groupKey] = {
+                    buyerDbName: p.buyerDbName || p.buyer,
+                    buyerDisplayName: p.buyer,
+                    cards: [],
+                    paymentData: null,
+                    hasPaymentSent: false
+                };
             }
-            grouped[p.buyer].cards.push({ serial, ...p });
+            grouped[groupKey].cards.push({ serial, ...p });
             if (p.status === 'payment_sent') {
-                grouped[p.buyer].hasPaymentSent = true;
-                if (p.paymentData) grouped[p.buyer].paymentData = p.paymentData;
+                grouped[groupKey].hasPaymentSent = true;
+                if (p.paymentData) grouped[groupKey].paymentData = p.paymentData;
             }
         });
 
@@ -1124,10 +1131,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (group.hasPaymentSent) {
                 actionsHtml = `
                     <div class="payment-actions">
-                        <button class="btn-confirm" onclick="confirmPaymentBatch('${group.buyer}')">
+                        <button class="btn-confirm" onclick="confirmPaymentBatch('${group.buyerDbName}')">
                             <i data-lucide="check" class="w-3.5 h-3.5"></i> Confirmar Todo
                         </button>
-                        <button class="btn-reject" onclick="rejectPaymentBatch('${group.buyer}')">
+                        <button class="btn-reject" onclick="rejectPaymentBatch('${group.buyerDbName}')">
                             <i data-lucide="x" class="w-3.5 h-3.5"></i> Rechazar Todo
                         </button>
                     </div>
@@ -1135,7 +1142,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 actionsHtml = `
                     <div class="payment-actions">
-                        <button class="btn-reject" onclick="rejectPaymentBatch('${group.buyer}')">
+                        <button class="btn-reject" onclick="rejectPaymentBatch('${group.buyerDbName}')">
                             <i data-lucide="x" class="w-3.5 h-3.5"></i> Liberar Todo
                         </button>
                     </div>
@@ -1145,7 +1152,7 @@ document.addEventListener('DOMContentLoaded', () => {
             entry.innerHTML = `
                 <div class="flex items-center justify-between mb-1">
                     <div class="flex items-center gap-2">
-                        <span class="text-white font-bold text-sm">${group.buyer}</span>
+                        <span class="text-white font-bold text-sm">${group.buyerDisplayName}</span>
                         <span class="text-gray-400 text-xs">${group.cards.length} cartón(es) · $${totalAmount}</span>
                     </div>
                     <span class="payment-status ${statusClass}">${statusText}</span>
@@ -1181,8 +1188,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (pendingPayments[data.serial]) {
                 pendingPayments[data.serial].status = 'payment_sent';
                 if (data.paymentData) pendingPayments[data.serial].paymentData = data.paymentData;
+                if (data.buyerDbName) pendingPayments[data.serial].buyerDbName = data.buyerDbName;
             } else {
                 pendingPayments[data.serial] = {
+                    buyerDbName: data.buyerDbName || data.buyerName,
                     buyer: data.buyerName,
                     status: 'payment_sent',
                     paymentData: data.paymentData || { ref: "Actualice para ver", method: "-" },
@@ -1192,6 +1201,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showMessage(`"${data.buyerName}" envió pago para el cartón #${data.serial}`);
         } else {
             pendingPayments[data.serial] = {
+                buyerDbName: data.buyerDbName || data.buyerName,
                 buyer: data.buyerName,
                 status: data.status || 'reserved',
                 paymentData: null,
@@ -1238,7 +1248,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const cardsArray = Array.isArray(p.cards) ? p.cards : [];
                     cardsArray.forEach(serial => {
                         pendingPayments[serial] = {
-                            buyer: p.buyer_name,
+                            buyerDbName: p.buyer_name, // primary key
+                            buyer: p.buyer_name, // fallback for legacy
                             status: 'payment_sent',
                             paymentData: { method: p.payment_method, ref: p.reference_number, amount: p.amount },
                             reservedAt: p.created_at
