@@ -3,6 +3,7 @@
 // ============================================================
 
 let playerName = '';
+let playerDisplayName = '';
 const supabaseUrl = 'https://rhzgfxbunkbqqkgiregs.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJoemdmeGJ1bmticXFrZ2lyZWdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1MjA0MTgsImV4cCI6MjA4ODA5NjQxOH0.eMcZdTUP7zvUUhMos-IGQF2Bhh53_V1_vGtB1hDlbAM';
 const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
@@ -97,7 +98,7 @@ async function loginPlayer() {
         if (data.password === password) {
             const user = { username: data.username, displayName: data.display_name, role: data.role };
             localStorage.setItem('bingoUser', JSON.stringify(user));
-            enterGame(user.displayName);
+            enterGame(user);
         } else {
             showAuthError('Contraseña incorrecta.');
             btn.disabled = false;
@@ -155,7 +156,7 @@ async function registerPlayer() {
         if (!error) {
             const user = { username: newUser.username, displayName: newUser.display_name, role: newUser.role };
             localStorage.setItem('bingoUser', JSON.stringify(user));
-            enterGame(user.displayName);
+            enterGame(user);
         } else {
             showAuthError('Error al crear usuario en la base de datos.');
             btn.disabled = false;
@@ -171,9 +172,10 @@ async function registerPlayer() {
 }
 
 // --- Enter Game (common entry point after auth) ---
-function enterGame(displayName) {
-    playerName = displayName;
-    document.getElementById('displayPlayerName').textContent = playerName;
+function enterGame(user) {
+    playerName = user.username; // Usar username para relaciones BD
+    playerDisplayName = user.displayName; // Usar display name para mensajes UI
+    document.getElementById('displayPlayerName').textContent = playerDisplayName;
 
     loginScreen.style.transition = 'opacity 0.4s';
     loginScreen.style.opacity = '0';
@@ -187,12 +189,12 @@ function enterGame(displayName) {
 
 // --- Auto-login from localStorage ---
 (function autoLogin() {
-    const saved = localStorage.getItem('bingoUser');
-    if (saved) {
+    const stored = localStorage.getItem('bingoUser');
+    if (stored) {
         try {
-            const user = JSON.parse(saved);
-            if (user && user.displayName) {
-                enterGame(user.displayName);
+            const user = JSON.parse(stored);
+            if (user && user.username) {
+                enterGame(user);
                 return;
             }
         } catch (e) { /* ignore */ }
@@ -768,7 +770,7 @@ async function checkoutCart() {
             bingoChannel.send({
                 type: 'broadcast',
                 event: 'card-purchased',
-                payload: { serial, status: 'reserved', buyerName: playerName, timestamp: reservedAt }
+                payload: { serial, status: 'reserved', buyerName: playerDisplayName, timestamp: reservedAt }
             });
         });
 
@@ -1053,7 +1055,7 @@ document.getElementById('submitPaymentBtn').addEventListener('click', async () =
             bingoChannel.send({
                 type: 'broadcast',
                 event: 'card-purchased',
-                payload: { serial, status: 'payment_sent', buyerName: playerName }
+                payload: { serial, status: 'payment_sent', buyerName: playerDisplayName }
             });
         }
 
@@ -1451,7 +1453,7 @@ function claimWin(claimType) {
             type: 'broadcast',
             event: 'player-claims-win',
             payload: {
-                playerName,
+                playerName: playerDisplayName,
                 cardSerial: card.serial,
                 claimType
             }
@@ -1727,7 +1729,7 @@ function submitWinnerPaymentData() {
         type: 'broadcast',
         event: 'winner-payment-data',
         payload: {
-            playerName,
+            playerName: playerDisplayName,
             gameId: currentGameId,
             paymentData: { name, cedula, bank, phone }
         }
@@ -1844,7 +1846,7 @@ function submitWinnerPayDataModal(cardSerial, prizeType, gameId) {
         type: 'broadcast',
         event: 'winner-payment-data',
         payload: {
-            playerName,
+            playerName: playerDisplayName,
             gameId,
             cardSerial,
             prizeType,
