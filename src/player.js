@@ -3,7 +3,10 @@
 // ============================================================
 
 let playerName = '';
-let socket = null;
+const supabaseUrl = 'TU_SUPABASE_URL';
+const supabaseKey = 'TU_SUPABASE_ANON_KEY';
+const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+const bingoChannel = supabase.channel('bingo-room');
 let calledNumbers = new Set();
 let myCards = new Set();       // Serials de mis cartones (cualquier estado)
 let myCardStatuses = {};       // { serial: 'reserved' | 'payment_sent' | 'confirmed' }
@@ -82,24 +85,27 @@ async function loginPlayer() {
     btn.innerHTML = '<span class="flex items-center justify-center gap-2"><div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Entrando...</span>';
 
     try {
-        const res = await fetch('/api/auth/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password })
-        });
-        const data = await res.json();
+        const { data, error } = await supabase.from('bingo_users').select('*').eq('username', username).single();
+        if (error || !data) {
+            showAuthError('Usuario no encontrado.');
+            btn.disabled = false;
+            btn.innerHTML = '<span class="flex items-center justify-center gap-2"><i data-lucide="log-in" class="w-5 h-5"></i> Entrar al Juego</span>';
+            if (window.lucide) window.lucide.createIcons();
+            return;
+        }
 
-        if (res.ok && data.success) {
-            localStorage.setItem('bingoUser', JSON.stringify(data.user));
-            enterGame(data.user.displayName);
+        if (data.password === password) {
+            const user = { username: data.username, displayName: data.display_name, role: data.role };
+            localStorage.setItem('bingoUser', JSON.stringify(user));
+            enterGame(user.displayName);
         } else {
-            showAuthError(data.error || 'Error al iniciar sesión.');
+            showAuthError('Contraseña incorrecta.');
             btn.disabled = false;
             btn.innerHTML = '<span class="flex items-center justify-center gap-2"><i data-lucide="log-in" class="w-5 h-5"></i> Entrar al Juego</span>';
             if (window.lucide) window.lucide.createIcons();
         }
     } catch (err) {
-        showAuthError('Error de conexión con el servidor.');
+        showAuthError('Error de conexión con el base de datos.');
         btn.disabled = false;
         btn.innerHTML = '<span class="flex items-center justify-center gap-2"><i data-lucide="log-in" class="w-5 h-5"></i> Entrar al Juego</span>';
         if (window.lucide) window.lucide.createIcons();
@@ -133,24 +139,31 @@ async function registerPlayer() {
     btn.innerHTML = '<span class="flex items-center justify-center gap-2"><div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Creando...</span>';
 
     try {
-        const res = await fetch('/api/auth/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password, displayName })
-        });
-        const data = await res.json();
+        // Verificar si el usuario ya existe
+        const { data: existingUser } = await supabase.from('bingo_users').select('username').eq('username', username).single();
+        if (existingUser) {
+            showAuthError('El usuario ya existe.');
+            btn.disabled = false;
+            btn.innerHTML = '<span class="flex items-center justify-center gap-2"><i data-lucide="user-plus" class="w-5 h-5"></i> Crear Cuenta</span>';
+            if (window.lucide) window.lucide.createIcons();
+            return;
+        }
 
-        if (res.ok && data.success) {
-            localStorage.setItem('bingoUser', JSON.stringify(data.user));
-            enterGame(data.user.displayName);
+        const newUser = { username, password, display_name: displayName, role: 'player' };
+        const { error } = await supabase.from('bingo_users').insert(newUser);
+
+        if (!error) {
+            const user = { username: newUser.username, displayName: newUser.display_name, role: newUser.role };
+            localStorage.setItem('bingoUser', JSON.stringify(user));
+            enterGame(user.displayName);
         } else {
-            showAuthError(data.error || 'Error al registrarse.');
+            showAuthError('Error al crear usuario en la base de datos.');
             btn.disabled = false;
             btn.innerHTML = '<span class="flex items-center justify-center gap-2"><i data-lucide="user-plus" class="w-5 h-5"></i> Crear Cuenta</span>';
             if (window.lucide) window.lucide.createIcons();
         }
     } catch (err) {
-        showAuthError('Error de conexión con el servidor.');
+        showAuthError('Error de conexión con la base de datos.');
         btn.disabled = false;
         btn.innerHTML = '<span class="flex items-center justify-center gap-2"><i data-lucide="user-plus" class="w-5 h-5"></i> Crear Cuenta</span>';
         if (window.lucide) window.lucide.createIcons();
@@ -231,19 +244,17 @@ document.addEventListener('DOMContentLoaded', () => {
 // Socket.IO Connection
 // ============================================================
 function initSocket() {
-    socket = io();
-
-    socket.on('connect', () => {
-        console.log('[PLAYER] Conectado:', socket.id);
-        setConnectionStatus(true);
+    bingoChannel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+            console.log('[PLAYER] Conectado a Supabase Broadcast Channel');
+            setConnectionStatus(true);
+        } else {
+            setConnectionStatus(false);
+        }
     });
 
-    socket.on('disconnect', () => {
-        console.log('[PLAYER] Desconectado');
-        setConnectionStatus(false);
-    });
-
-    socket.on('cards-updated', (data) => {
+    bingoChannel.on('broadcast', { event: 'cards-updated' }, (ev) => {
+        const data = ev.payload;
         allCards = data.cards;
         cardPrice = data.cardPrice;
         myCards.clear();
@@ -261,7 +272,8 @@ function initSocket() {
         showToast('El animador generó nuevos cartones. ¡Ve a la tienda!', 'info');
     });
 
-    socket.on('card-purchased', (data) => {
+    bingoChannel.on('broadcast', { event: 'card-purchased' }, (ev) => {
+        const data = ev.payload;
         const card = allCards.find(c => String(c.serial) === String(data.serial));
         if (card) {
             card.status = data.status || 'reserved';
@@ -282,7 +294,8 @@ function initSocket() {
         updateStats();
     });
 
-    socket.on('card-released', (data) => {
+    bingoChannel.on('broadcast', { event: 'card-released' }, (ev) => {
+        const data = ev.payload;
         const card = allCards.find(c => String(c.serial) === String(data.serial));
         if (card) {
             card.status = 'available';
@@ -308,7 +321,8 @@ function initSocket() {
         updateStats();
     });
 
-    socket.on('payment-confirmed', (data) => {
+    bingoChannel.on('broadcast', { event: 'payment-confirmed' }, (ev) => {
+        const data = ev.payload;
         const card = allCards.find(c => String(c.serial) === String(data.serial));
         if (card) card.status = 'confirmed';
 
@@ -329,14 +343,16 @@ function initSocket() {
         updateStats();
     });
 
-    socket.on('new-ball', (data) => {
+    bingoChannel.on('broadcast', { event: 'new-ball' }, (ev) => {
+        const data = ev.payload;
         calledNumbers = new Set(data.calledNumbers);
         updateBallDisplay(data.number, data.lastBalls, data.ballCount);
         markMyCards();
     });
 
     // === GAME-STARTED: ventas cerradas ===
-    socket.on('game-started', (data) => {
+    bingoChannel.on('broadcast', { event: 'game-started' }, (ev) => {
+        const data = ev.payload;
         salesLocked = true;
         allCards = data.cards;
         selectedCards.clear();
@@ -383,12 +399,14 @@ function initSocket() {
     });
 
     // === PAYMENT CONFIG UPDATED ===
-    socket.on('payment-config-updated', (data) => {
+    bingoChannel.on('broadcast', { event: 'payment-config-updated' }, (ev) => {
+        const data = ev.payload;
         animatorPaymentConfig = data;
         updatePaymentConfigDisplay();
     });
 
-    socket.on('winner-announced', (data) => {
+    bingoChannel.on('broadcast', { event: 'winner-announced' }, (ev) => {
+        const data = ev.payload;
         const isMyCard = myCards.has(String(data.cardIndex));
         if (isMyCard) {
             showToast(`🎉 ¡FELICIDADES! Tu cartón #${data.cardIndex} ganó ${data.prizeType}!`, 'success');
@@ -410,13 +428,15 @@ function initSocket() {
     });
 
     // === GAME-PAUSED: alguien cantó ===
-    socket.on('game-paused', (data) => {
+    bingoChannel.on('broadcast', { event: 'game-paused' }, (ev) => {
+        const data = ev.payload;
         gamePaused = true;
         showClaimOverlay(data);
     });
 
     // === CLAIM-RESULT: resultado de verificación ===
-    socket.on('claim-result', (data) => {
+    bingoChannel.on('broadcast', { event: 'claim-result' }, (ev) => {
+        const data = ev.payload;
         gamePaused = false;
         hideClaimOverlay();
         if (data.valid) {
@@ -427,18 +447,20 @@ function initSocket() {
     });
 
     // === GAME-ENDED: Bingo validado, partida finalizada ===
-    socket.on('game-ended', (data) => {
+    bingoChannel.on('broadcast', { event: 'game-ended' }, (ev) => {
+        const data = ev.payload;
         hideClaimOverlay();
         gamePaused = false;
         showPlayerGameEndedModal(data);
     });
 
     // === GAME-BREAK: Receso ===
-    socket.on('game-break', (data) => {
+    bingoChannel.on('broadcast', { event: 'game-break' }, (ev) => {
+        const data = ev.payload;
         showToast(`⏸️ Receso de ${data.minutes} minuto(s). Pronto se reanudará.`, 'info');
     });
 
-    socket.on('game-reset', () => {
+    bingoChannel.on('broadcast', { event: 'game-reset' }, () => {
         allCards = [];
         myCards.clear();
         myCardStatuses = {};
@@ -457,7 +479,8 @@ function initSocket() {
         showToast('El animador inició una nueva partida.', 'info');
     });
 
-    socket.on('sync-state', (data) => {
+    bingoChannel.on('broadcast', { event: 'sync-state' }, (ev) => {
+        const data = ev.payload;
         calledNumbers = new Set(data.calledNumbers || []);
         allCards = data.cards || [];
         cardPrice = data.cardPrice || 0;
@@ -502,26 +525,26 @@ function setConnectionStatus(connected) {
 // ============================================================
 async function loadInitialState() {
     try {
-        const [cardsRes, stateRes] = await Promise.all([
-            fetch('/api/cards'),
-            fetch('/api/game-state')
+        const [cardsRes, stateRes, configRes] = await Promise.all([
+            supabase.from('bingo_cards').select('*'),
+            supabase.from('bingo_game_state').select('state').eq('id', 1).single(),
+            supabase.from('bingo_payment_config').select('methods').eq('id', 1).single()
         ]);
 
-        if (cardsRes.ok) {
-            const cardsData = await cardsRes.json();
-            allCards = cardsData.cards || [];
-            cardPrice = cardsData.cardPrice || 0;
+        if (!cardsRes.error && cardsRes.data) {
+            allCards = cardsRes.data;
+            cardPrice = cardsRes.data.length > 0 ? cardsRes.data[0].price : 0;
 
             allCards.forEach(c => {
-                if (c.buyer === playerName) {
+                if (c.buyer_name === playerName) {
                     myCards.add(String(c.serial));
                     myCardStatuses[c.serial] = c.status || 'reserved';
                 }
             });
         }
 
-        if (stateRes.ok) {
-            const stateData = await stateRes.json();
+        if (!stateRes.error && stateRes.data && stateRes.data.state) {
+            const stateData = stateRes.data.state;
             calledNumbers = new Set(stateData.calledNumbers || []);
 
             // Verificar si la partida ya comenzó
@@ -540,14 +563,9 @@ async function loadInitialState() {
         }
 
         // Cargar paymentConfig
-        if (stateRes.ok) {
-            try {
-                const pcRes = await fetch('/api/payment-config');
-                if (pcRes.ok) {
-                    animatorPaymentConfig = await pcRes.json();
-                    updatePaymentConfigDisplay();
-                }
-            } catch (e) { /* ignore */ }
+        if (!configRes.error && configRes.data) {
+            animatorPaymentConfig = configRes.data.methods || [];
+            updatePaymentConfigDisplay();
         }
 
         renderStore();
@@ -700,51 +718,67 @@ async function checkoutCart() {
     if (serials.length === 0) return;
 
     try {
-        const res = await fetch('/api/cards/buy-batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ playerName, serials })
-        });
+        // 1. Validar que los cartones sigan disponibles
+        const { data: checkCards, error: checkErr } = await supabase
+            .from('bingo_cards')
+            .select('serial, status')
+            .in('serial', serials);
 
-        const data = await res.json();
+        if (checkErr) throw checkErr;
 
-        if (res.ok) {
-            const reservedAt = data.reservedAt || new Date().toISOString();
+        const unavailableList = checkCards.filter(c => c.status !== 'available').map(c => c.serial);
 
-            for (const serial of data.serials) {
-                myCards.add(String(serial));
-                myCardStatuses[serial] = 'reserved';
-
-                const card = allCards.find(c => String(c.serial) === String(serial));
-                if (card) {
-                    card.status = 'reserved';
-                    card.buyer = playerName;
-                    card.reservedAt = reservedAt;
-                }
-            }
-
-            selectedCards.clear();
+        if (unavailableList.length > 0) {
+            showToast('Algunos cartones seleccionados ya no están disponibles.', 'error');
+            unavailableList.forEach(serial => selectedCards.delete(String(serial)));
             updateCartBar();
             renderStore();
-            renderMyCards();
-            updateStats();
+            return;
+        }
 
-            // Abrir modal de pago con todos los cartones reservados
-            openPaymentModal(data.serials, reservedAt);
-            showToast(`${data.serials.length} cartón(es) reservado(s). Tienes 10 minutos para pagar.`, 'info');
-        } else {
-            showToast(data.error || 'Error al reservar cartones.', 'error');
-            if (data.conflicts) {
-                data.conflicts.forEach(c => {
-                    selectedCards.delete(String(c.serial));
-                });
-                updateCartBar();
-                renderStore();
+        // 2. Reservar en Supabase
+        const reservedAt = new Date().toISOString();
+        const { error: updateErr } = await supabase
+            .from('bingo_cards')
+            .update({ status: 'reserved', buyer_name: playerName })
+            .in('serial', serials);
+
+        if (updateErr) throw updateErr;
+
+        for (const serial of serials) {
+            myCards.add(String(serial));
+            myCardStatuses[serial] = 'reserved';
+
+            const card = allCards.find(c => String(c.serial) === String(serial));
+            if (card) {
+                card.status = 'reserved';
+                card.buyer_name = playerName; // local property update based on what Supabase used
+                card.buyer = playerName;
             }
         }
+
+        selectedCards.clear();
+        updateCartBar();
+        renderStore();
+        renderMyCards();
+        updateStats();
+
+        // 3. Notificar a los demas participanes
+        serials.forEach(serial => {
+            bingoChannel.send({
+                type: 'broadcast',
+                event: 'card-purchased',
+                payload: { serial, status: 'reserved', buyerName: playerName, timestamp: reservedAt }
+            });
+        });
+
+        // Abrir modal de pago
+        openPaymentModal(serials, reservedAt);
+        showToast(`${serials.length} cartón(es) reservado(s). Tienes 10 minutos para pagar.`, 'info');
+
     } catch (err) {
         console.error('Error en checkout:', err);
-        showToast('Error de conexión.', 'error');
+        showToast('Error de conexión o base de datos.', 'error');
     }
 }
 
@@ -988,42 +1022,56 @@ document.getElementById('submitPaymentBtn').addEventListener('click', async () =
     }
 
     try {
-        const res = await fetch('/api/cards/submit-payment-batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                playerName,
-                serials: activePaymentSerials,
-                phone, bank, cedula
-            })
+        const totalAmount = activePaymentSerials.length * cardPrice;
+
+        // Registrar en pagos
+        const { error: insertErr } = await supabase.from('bingo_payments').insert({
+            buyer_name: playerName,
+            payment_method: document.getElementById('paymentMethod') ? document.getElementById('paymentMethod').value : 'Transferencia',
+            reference_number: phone + ' / ' + bank + ' / ' + cedula, // Simplificando los campos viejos en uno solo referencial
+            amount: totalAmount,
+            status: 'pending',
+            cards: activePaymentSerials
         });
 
-        const data = await res.json();
+        if (insertErr) throw insertErr;
 
-        if (res.ok) {
-            for (const serial of data.updated) {
-                myCardStatuses[serial] = 'payment_sent';
-                const card = allCards.find(c => String(c.serial) === String(serial));
-                if (card) card.status = 'payment_sent';
-            }
+        // Actualizar cartones
+        const { error: updateErr } = await supabase
+            .from('bingo_cards')
+            .update({ status: 'payment_sent' })
+            .in('serial', activePaymentSerials);
 
-            document.querySelector('.payment-modal-body').classList.add('hidden');
-            document.querySelector('.payment-modal-footer').classList.add('hidden');
-            document.getElementById('paymentWaitingState').classList.remove('hidden');
-            document.getElementById('paymentTimer').style.display = 'none';
+        if (updateErr) throw updateErr;
 
-            if (paymentTimerInterval) {
-                clearInterval(paymentTimerInterval);
-                paymentTimerInterval = null;
-            }
+        for (const serial of activePaymentSerials) {
+            myCardStatuses[serial] = 'payment_sent';
+            const card = allCards.find(c => String(c.serial) === String(serial));
+            if (card) card.status = 'payment_sent';
 
-            renderStore();
-            renderMyCards();
-            showToast('Pago enviado. Esperando verificación del animador.', 'success');
-            if (window.lucide) window.lucide.createIcons();
-        } else {
-            showToast(data.error || 'Error al enviar pago.', 'error');
+            // Avisar a todos del update local
+            bingoChannel.send({
+                type: 'broadcast',
+                event: 'card-purchased',
+                payload: { serial, status: 'payment_sent', buyerName: playerName }
+            });
         }
+
+        document.querySelector('.payment-modal-body').classList.add('hidden');
+        document.querySelector('.payment-modal-footer').classList.add('hidden');
+        document.getElementById('paymentWaitingState').classList.remove('hidden');
+        document.getElementById('paymentTimer').style.display = 'none';
+
+        if (paymentTimerInterval) {
+            clearInterval(paymentTimerInterval);
+            paymentTimerInterval = null;
+        }
+
+        renderStore();
+        renderMyCards();
+        showToast('Pago enviado. Esperando verificación del animador.', 'success');
+        if (window.lucide) window.lucide.createIcons();
+
     } catch (err) {
         console.error('Error enviando pago:', err);
         showToast('Error de conexión.', 'error');
@@ -1035,33 +1083,38 @@ document.getElementById('cancelReservationBtn').addEventListener('click', async 
     if (activePaymentSerials.length === 0) return;
 
     try {
-        const res = await fetch('/api/cards/cancel-batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ playerName, serials: activePaymentSerials })
-        });
+        const { error: updateErr } = await supabase
+            .from('bingo_cards')
+            .update({ status: 'available', buyer_name: null })
+            .in('serial', activePaymentSerials);
 
-        if (res.ok) {
-            for (const serial of activePaymentSerials) {
-                myCards.delete(serial);
-                delete myCardStatuses[serial];
+        if (updateErr) throw updateErr;
 
-                const card = allCards.find(c => String(c.serial) === String(serial));
-                if (card) {
-                    card.status = 'available';
-                    card.buyer = null;
-                }
+        for (const serial of activePaymentSerials) {
+            myCards.delete(serial);
+            delete myCardStatuses[serial];
+
+            const card = allCards.find(c => String(c.serial) === String(serial));
+            if (card) {
+                card.status = 'available';
+                card.buyer_name = null;
+                card.buyer = null;
             }
 
-            closePaymentModal();
-            renderStore();
-            renderMyCards();
-            updateStats();
-            showToast('Reservas canceladas.', 'info');
-        } else {
-            const data = await res.json();
-            showToast(data.error || 'Error al cancelar.', 'error');
+            // Notifica
+            bingoChannel.send({
+                type: 'broadcast',
+                event: 'card-released',
+                payload: { serial }
+            });
         }
+
+        closePaymentModal();
+        renderStore();
+        renderMyCards();
+        updateStats();
+        showToast('Reservas canceladas.', 'info');
+
     } catch (err) {
         console.error('Error cancelando:', err);
         showToast('Error de conexión.', 'error');
@@ -1394,13 +1447,15 @@ function claimWin(claimType) {
 
     // Enviar claim solo para los cartones que realmente tienen la jugada
     validCards.forEach(card => {
-        if (socket) {
-            socket.emit('player-claims-win', {
+        bingoChannel.send({
+            type: 'broadcast',
+            event: 'player-claims-win',
+            payload: {
                 playerName,
                 cardSerial: card.serial,
                 claimType
-            });
-        }
+            }
+        });
     });
 
     showToast(`🎤 ¡Has cantado ${claimType}! Esperando verificación del animador...`, 'success');

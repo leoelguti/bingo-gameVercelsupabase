@@ -1,5 +1,13 @@
-// Variables globales
-const socket = typeof io !== 'undefined' ? io() : null;
+const supabaseUrl = 'TU_SUPABASE_URL';
+const supabaseKey = 'TU_SUPABASE_ANON_KEY';
+const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+const bingoChannel = supabase.channel('bingo-room');
+
+bingoChannel.subscribe((status) => {
+    if (status === 'SUBSCRIBED') {
+        console.log('Conectado a Supabase Broadcast Channel');
+    }
+});
 let calledNumbers = new Set();
 const totalBalls = 75;
 let currentNumber = null;
@@ -56,11 +64,9 @@ function autoSave() {
     }
 
     if (window.location.protocol !== 'file:') {
-        fetch('/save-game', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(gameState)
-        }).catch(err => console.error('Error auto-saving to server:', err));
+        supabase.from('bingo_game_state').update({ state: gameState }).eq('id', 1).then(({ error }) => {
+            if (error) console.error('Error auto-saving to Supabase:', error);
+        });
     }
 }
 
@@ -166,7 +172,7 @@ function executeNewGame() {
     document.getElementById('bingoCards').innerHTML = '';
 
     // 3. Notificar a los participantes del reset
-    if (socket) socket.emit('game-reset');
+    bingoChannel.send({ type: 'broadcast', event: 'game-reset', payload: {} });
 
     // 4. Forzar el refrescamiento absoluto del navegador para limpiar la memoria JS
     window.location.reload(true);
@@ -299,15 +305,17 @@ function finalizeNumberGeneration(number) {
     isAnimating = false; // Permitir generar otro número
     markNumberInCards(number);
 
-    // Emitir la bola a los participantes via Socket.IO
-    if (socket) {
-        socket.emit('new-ball', {
+    // Emitir la bola a los participantes via Supabase
+    bingoChannel.send({
+        type: 'broadcast',
+        event: 'new-ball',
+        payload: {
             number: number,
             calledNumbers: Array.from(calledNumbers),
             lastBalls: lastBalls,
             ballCount: ballCount
-        });
-    }
+        }
+    });
 
     checkWinners(); // Verificar si alguien ganó después de marcar el número
     autoSave(); // Autoguardado silencioso despues de cada balota
@@ -525,39 +533,17 @@ function generateCards() {
     autoSave(); // Autoguardado al crear cartones
 
     // Registrar cartones en el servidor para la vista de participantes
-    if (socket) {
-        const cardsData = Array.from(container.querySelectorAll('.bingo-card')).map(card => {
-            const cells = card.querySelectorAll('.bingo-cell');
-            const numbers = {};
-            'BINGO'.split('').forEach((letter, colIdx) => {
-                numbers[letter] = [];
-                for (let row = 0; row < 5; row++) {
-                    const cell = card.querySelector(`.bingo-cell[data-row="${row}"][data-col="${colIdx}"]`);
-                    numbers[letter].push(cell ? cell.textContent : '');
-                }
-            });
-            return {
-                serial: card.dataset.cardIndex,
-                numbers: numbers,
-                price: cardPrice
-            };
-        });
-
-        socket.emit('cards-generated', {
+    bingoChannel.send({
+        type: 'broadcast',
+        event: 'cards-generated',
+        payload: {
             cards: cardsData,
             cardPrice: cardPrice,
             gameMode: gameMode,
             selectedFigure: selectedFigure,
             gameId: currentGameId
-        });
-
-        // También registrar via API REST como backup
-        fetch('/api/cards/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cards: cardsData, cardPrice: cardPrice })
-        }).catch(err => console.error('Error registrando cartones:', err));
-    }
+        }
+    });
 }
 
 // Marcar número en los cartones
@@ -696,14 +682,16 @@ async function checkWinners() {
             }
 
             // Notificar ganador a los participantes
-            if (socket) {
-                for (const winner of newWinners) {
-                    socket.emit('winner-announced', {
+            for (const winner of newWinners) {
+                bingoChannel.send({
+                    type: 'broadcast',
+                    event: 'winner-announced',
+                    payload: {
                         cardIndex: winner.cardIndex,
                         prizeType: winner.prizeType,
                         nextMode: nextMode
-                    });
-                }
+                    }
+                });
             }
         }
     }
@@ -1297,30 +1285,54 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Cargar pagos pendientes al inicio
-    fetch('/api/payments/pending').then(res => res.json()).then(data => {
-        if (data.pending) {
-            data.pending.forEach(p => {
-                pendingPayments[p.serial] = {
-                    buyer: p.buyer,
-                    status: p.status,
-                    paymentData: p.paymentData,
-                    reservedAt: p.reservedAt
-                };
-                assignBuyerNameToCard(p.serial, p.buyer);
-            });
-            renderPaymentsPanel();
-        }
-    }).catch(err => console.error('Error cargando pagos pendientes:', err));
+    supabase.from('bingo_payments')
+        .select('*')
+        .eq('status', 'pending')
+        .then(({ data, error }) => {
+            if (error) {
+                console.error('Error cargando pagos pendientes:', error);
+                return;
+            }
+            if (data && data.length > 0) {
+                data.forEach(p => {
+                    const cardsArray = Array.isArray(p.cards) ? p.cards : [];
+                    cardsArray.forEach(serial => {
+                        pendingPayments[serial] = {
+                            buyer: p.buyer_name,
+                            status: 'payment_sent',
+                            paymentData: { method: p.payment_method, ref: p.reference_number, amount: p.amount },
+                            reservedAt: p.created_at
+                        };
+                        assignBuyerNameToCard(serial, p.buyer_name);
+                    });
+                });
+                renderPaymentsPanel();
+            }
+        });
 
     // ============================================================
     // Payment Config (Datos de pago del animador)
     // ============================================================
     // Cargar config existente
-    fetch('/api/payment-config').then(res => res.json()).then(data => {
-        if (data.bank) document.getElementById('payConfigBank').value = data.bank;
-        if (data.phone) document.getElementById('payConfigPhone').value = data.phone;
-        if (data.cedula) document.getElementById('payConfigCedula').value = data.cedula;
-    }).catch(err => console.error('Error cargando config de pago:', err));
+    supabase.from('bingo_payment_config')
+        .select('methods')
+        .eq('id', 1)
+        .single()
+        .then(({ data, error }) => {
+            if (!error && data && data.methods) {
+                const methods = data.methods;
+                const bnk = methods.find(m => m.banco);
+                const pm = methods.find(m => m.telefono);
+                if (bnk) {
+                    document.getElementById('payConfigBank').value = bnk.banco || '';
+                    document.getElementById('payConfigCedula').value = bnk.cedula || '';
+                }
+                if (pm) {
+                    document.getElementById('payConfigPhone').value = pm.telefono || '';
+                    if (!bnk) document.getElementById('payConfigCedula').value = pm.cedula || '';
+                }
+            }
+        });
 
     // Guardar config
     document.getElementById('savePaymentConfigBtn').addEventListener('click', async () => {
@@ -1329,17 +1341,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const cedula = document.getElementById('payConfigCedula').value.trim();
 
         try {
-            const res = await fetch('/api/payment-config', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ bank, phone, cedula })
-            });
-            if (res.ok) {
+            // Emulate old API behavior formatting
+            const methods = [];
+            if (phone) methods.push({ type: 'pago_movil', telefono: phone, cedula: cedula });
+            if (bank) methods.push({ type: 'transferencia', banco: bank, cuenta: bank, cedula: cedula });
+
+            const { error } = await supabase.from('bingo_payment_config').update({ methods }).eq('id', 1);
+            if (!error) {
                 const statusEl = document.getElementById('payConfigStatus');
                 statusEl.textContent = '✓ Datos guardados y emitidos a jugadores';
                 statusEl.className = 'text-xs text-center text-emerald-400';
                 statusEl.classList.remove('hidden');
                 setTimeout(() => statusEl.classList.add('hidden'), 3000);
+
+                // Broadcast a jugadores
+                bingoChannel.send({
+                    type: 'broadcast',
+                    event: 'payment-config-updated',
+                    payload: methods
+                });
             }
         } catch (err) {
             console.error('Error guardando config de pago:', err);
@@ -1355,16 +1375,33 @@ document.addEventListener('DOMContentLoaded', () => {
 // Batch confirm (all cards of a buyer)
 async function confirmPaymentBatch(buyer) {
     try {
-        const res = await fetch('/api/cards/confirm-batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ buyer })
-        });
-        const data = await res.json();
-        if (res.ok) {
-            showMessage(`Pago de "${buyer}" confirmado (${data.confirmed?.length || 0} cartones).`);
+        const { data: cardsToConfirm } = await supabase.from('bingo_cards').select('serial').eq('buyer_name', buyer).eq('status', 'payment_sent');
+        if (cardsToConfirm && cardsToConfirm.length > 0) {
+            const serials = cardsToConfirm.map(c => String(c.serial));
+
+            await supabase.from('bingo_cards').update({ status: 'confirmed' }).in('serial', serials);
+            await supabase.from('bingo_payments').update({ status: 'approved' }).eq('buyer_name', buyer).eq('status', 'pending');
+
+            showMessage(`Pago de "${buyer}" confirmado (${serials.length} cartones).`);
+
+            serials.forEach(s => {
+                const cardEl = document.querySelector(`.bingo-card[data-card-index="${s}"]`);
+                if (cardEl) {
+                    cardEl.classList.remove('reserved', 'payment-sent');
+                    cardEl.classList.add('sold');
+                }
+                delete pendingPayments[s];
+
+                bingoChannel.send({
+                    type: 'broadcast',
+                    event: 'payment-confirmed',
+                    payload: { serial: s, status: 'confirmed' }
+                });
+            });
+            renderPaymentsPanel();
+            updateTotalPot();
         } else {
-            showMessage(data.error || 'Error al confirmar.');
+            showMessage('No se encontraron cartones pendientes para confirmar.');
         }
     } catch (err) {
         console.error('Error confirmando pago batch:', err);
@@ -1374,16 +1411,32 @@ async function confirmPaymentBatch(buyer) {
 // Batch reject (all cards of a buyer)
 async function rejectPaymentBatch(buyer) {
     try {
-        const res = await fetch('/api/cards/reject-batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ buyer })
-        });
-        const data = await res.json();
-        if (res.ok) {
-            showMessage(`Cartones de "${buyer}" liberados (${data.released?.length || 0}).`);
+        const { data: cardsToReject } = await supabase.from('bingo_cards').select('serial').eq('buyer_name', buyer).eq('status', 'payment_sent');
+        if (cardsToReject && cardsToReject.length > 0) {
+            const serials = cardsToReject.map(c => String(c.serial));
+
+            await supabase.from('bingo_cards').update({ status: 'reserved' }).in('serial', serials);
+            await supabase.from('bingo_payments').update({ status: 'rejected' }).eq('buyer_name', buyer).eq('status', 'pending');
+
+            showMessage(`Cartones de "${buyer}" liberados (${serials.length}).`);
+
+            serials.forEach(s => {
+                const cardEl = document.querySelector(`.bingo-card[data-card-index="${s}"]`);
+                if (cardEl) {
+                    cardEl.classList.remove('payment-sent');
+                    cardEl.classList.add('reserved');
+                }
+                pendingPayments[s].status = 'reserved';
+
+                bingoChannel.send({
+                    type: 'broadcast',
+                    event: 'card-purchased',
+                    payload: { serial: s, status: 'reserved', buyerName: buyer, timestamp: new Date() }
+                });
+            });
+            renderPaymentsPanel();
         } else {
-            showMessage(data.error || 'Error al rechazar.');
+            showMessage('No se encontraron cartones pendientes para rechazar.');
         }
     } catch (err) {
         console.error('Error rechazando pago batch:', err);
@@ -1639,31 +1692,36 @@ async function submitWinnerPayment() {
         return;
     }
 
-    try {
-        const res = await fetch('/api/winners/payment', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                gameId, cardSerial, mode,
-                prize: mode,
-                amount,
-                paymentData: { name, cedula, bank, phone, method }
-            })
-        });
-        const data = await res.json();
-        if (res.ok) {
+    supabase.from('bingo_winners').update({ payment_status: 'paid' }).eq('card_index', cardSerial).eq('prize_type', mode).then(({ error }) => {
+        if (!error) {
             showMessage(`✅ Pago de $${amount} registrado para cartón #${cardSerial}.`);
             closeWinnerPaymentForm();
         } else {
-            showMessage(data.error || 'Error al registrar pago.');
+            showMessage('Error al registrar pago en base de datos.');
+            console.error('Error:', error);
         }
-    } catch (err) {
-        console.error('Error registrando pago:', err);
-        showMessage('Error de conexión.');
-    }
+    });
 }
 
-// Load allTimeWinners on page load
-fetch('/api/winners').then(r => r.json()).then(data => {
-    allTimeWinnersCache = data.winners || [];
-}).catch(e => console.error('Error cargando historial de ganadores:', e));
+// Escuchar eventos de jugadores
+bingoChannel.on('broadcast', { event: 'player-claims-win' }, (event) => {
+    const data = event.payload;
+    // Notificación visual al animador
+    showMessage(`¡ALERTA! El jugador "${data.playerName}" canta ${data.claimType} con el cartón #${data.cardSerial}. ¡Verifica!`);
+
+    // El propio animador pausa automáticamente el juego para todos al recibir un claim
+    bingoChannel.send({
+        type: 'broadcast',
+        event: 'game-paused',
+        payload: {
+            playerName: data.playerName,
+            cardSerial: data.cardSerial,
+            claimType: data.claimType
+        }
+    });
+});
+
+bingoChannel.on('broadcast', { event: 'claim-result' }, (event) => {
+    // Escuchar el resultado emitido por otro animador (si hubiera varios en la misma sala)
+    // Opcionalmente podemos actualizar la interfaz si el resultado del claim es valido
+});
