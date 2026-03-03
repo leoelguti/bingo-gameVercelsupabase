@@ -1,5 +1,5 @@
-const supabaseUrl = 'TU_SUPABASE_URL';
-const supabaseKey = 'TU_SUPABASE_ANON_KEY';
+const supabaseUrl = 'https://rhzgfxbunkbqqkgiregs.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJoemdmeGJ1bmticXFrZ2lyZWdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1MjA0MTgsImV4cCI6MjA4ODA5NjQxOH0.eMcZdTUP7zvUUhMos-IGQF2Bhh53_V1_vGtB1hDlbAM';
 const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 const bingoChannel = supabase.channel('bingo-room');
 
