@@ -25,7 +25,122 @@ let cardPrice = 10;
 let currentGameId = '';
 let allTimeWinnersCache = [];
 //CODIGO NUEVO//CODIGO NUEVO//CODIGO NUEVO//CODIGO NUEVO//CODIGO NUEVO//CODIGO NUEVO
+let pendingPayments = {}; // { serial: { buyer, status, paymentData, reservedAt } }
 
+function renderPaymentsPanel() {
+    const list = document.getElementById('paymentsList');
+    const countBadge = document.getElementById('pendingPaymentsCount');
+    if (!list || !countBadge) return;
+
+    const entries = Object.entries(pendingPayments);
+
+    // Agrupar por comprador
+    const grouped = {};
+    entries.forEach(([serial, p]) => {
+        const groupKey = p.buyerDbName || p.buyer; // Usar el internal name para agrupar
+        if (!grouped[groupKey]) {
+            grouped[groupKey] = {
+                buyerDbName: p.buyerDbName || p.buyer,
+                buyerDisplayName: p.buyer,
+                cards: [],
+                paymentData: null,
+                hasPaymentSent: false
+            };
+        }
+        grouped[groupKey].cards.push({ serial, ...p });
+        if (p.status === 'payment_sent') {
+            grouped[groupKey].hasPaymentSent = true;
+            if (p.paymentData) grouped[groupKey].paymentData = p.paymentData;
+        }
+    });
+
+    const buyers = Object.values(grouped);
+    countBadge.textContent = buyers.length;
+
+    if (buyers.length === 0) {
+        list.innerHTML = '<div class="text-gray-500 text-sm italic text-center py-4">No hay pagos pendientes.</div>';
+        return;
+    }
+
+    list.innerHTML = '';
+    buyers.forEach(group => {
+        const entry = document.createElement('div');
+        entry.className = 'payment-entry';
+
+        const totalAmount = group.cards.length * cardPrice;
+        const cardSerials = group.cards.map(c => `#${c.serial}`).join(', ');
+        const statusClass = group.hasPaymentSent ? 'payment-sent' : 'reserved';
+        const statusText = group.hasPaymentSent ? 'Pago Enviado' : 'Esperando Pago';
+
+        let paymentDataHtml = '';
+        if (group.paymentData && group.hasPaymentSent) {
+            paymentDataHtml = `
+                <div class="payment-data-grid" style="grid-template-columns: 1fr;">
+                    <div class="data-item">
+                        <span class="data-label">Referencia</span>
+                        <span class="data-value">${group.paymentData.ref || '—'}</span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">Método</span>
+                        <span class="data-value">${group.paymentData.method || '—'}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        let actionsHtml = '';
+        if (group.hasPaymentSent) {
+            actionsHtml = `
+                <div class="payment-actions">
+                    <button class="btn-confirm" onclick="confirmPaymentBatch('${group.buyerDbName}')">
+                        <i data-lucide="check" class="w-3.5 h-3.5"></i> Confirmar Todo
+                    </button>
+                    <button class="btn-reject" onclick="rejectPaymentBatch('${group.buyerDbName}')">
+                        <i data-lucide="x" class="w-3.5 h-3.5"></i> Rechazar Todo
+                    </button>
+                </div>
+            `;
+        } else {
+            actionsHtml = `
+                <div class="payment-actions">
+                    <button class="btn-reject" onclick="rejectPaymentBatch('${group.buyerDbName}')">
+                        <i data-lucide="x" class="w-3.5 h-3.5"></i> Liberar Todo
+                    </button>
+                </div>
+            `;
+        }
+
+        entry.innerHTML = `
+            <div class="flex items-center justify-between mb-1">
+                <div class="flex items-center gap-2">
+                    <span class="text-white font-bold text-sm">${group.buyerDisplayName}</span>
+                    <span class="text-gray-400 text-xs">${group.cards.length} cartón(es) · $${totalAmount}</span>
+                </div>
+                <span class="payment-status ${statusClass}">${statusText}</span>
+            </div>
+            <div class="text-xs text-gray-500 mb-1">Cartones: ${cardSerials}</div>
+            ${paymentDataHtml}
+            ${actionsHtml}
+        `;
+
+        list.appendChild(entry);
+    });
+
+    if (window.lucide) window.lucide.createIcons();
+}
+
+// Asignar nombre del comprador al cartón en la vista del animador
+function assignBuyerNameToCard(serial, buyerName) {
+    const cards = document.querySelectorAll('.bingo-card');
+    cards.forEach(card => {
+        if (card.dataset.cardIndex === String(serial)) {
+            const nameInput = card.querySelector('.card-name-input');
+            if (nameInput && !nameInput.value) {
+                nameInput.value = buyerName;
+            }
+        }
+    });
+}
 function getGameState() {
     return {
         calledNumbers: Array.from(calledNumbers),
@@ -1066,121 +1181,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // ============================================================
     // Panel de Pagos del Animador (Agrupado por comprador)
     // ============================================================
-    let pendingPayments = {}; // { serial: { buyer, status, paymentData, reservedAt } }
-
-    function renderPaymentsPanel() {
-        const list = document.getElementById('paymentsList');
-        const countBadge = document.getElementById('pendingPaymentsCount');
-        const entries = Object.entries(pendingPayments);
-
-        // Agrupar por comprador
-        const grouped = {};
-        entries.forEach(([serial, p]) => {
-            const groupKey = p.buyerDbName || p.buyer; // Usar el internal name para agrupar
-            if (!grouped[groupKey]) {
-                grouped[groupKey] = {
-                    buyerDbName: p.buyerDbName || p.buyer,
-                    buyerDisplayName: p.buyer,
-                    cards: [],
-                    paymentData: null,
-                    hasPaymentSent: false
-                };
-            }
-            grouped[groupKey].cards.push({ serial, ...p });
-            if (p.status === 'payment_sent') {
-                grouped[groupKey].hasPaymentSent = true;
-                if (p.paymentData) grouped[groupKey].paymentData = p.paymentData;
-            }
-        });
-
-        const buyers = Object.values(grouped);
-        countBadge.textContent = buyers.length;
-
-        if (buyers.length === 0) {
-            list.innerHTML = '<div class="text-gray-500 text-sm italic text-center py-4">No hay pagos pendientes.</div>';
-            return;
-        }
-
-        list.innerHTML = '';
-        buyers.forEach(group => {
-            const entry = document.createElement('div');
-            entry.className = 'payment-entry';
-
-            const totalAmount = group.cards.length * cardPrice;
-            const cardSerials = group.cards.map(c => `#${c.serial}`).join(', ');
-            const statusClass = group.hasPaymentSent ? 'payment-sent' : 'reserved';
-            const statusText = group.hasPaymentSent ? 'Pago Enviado' : 'Esperando Pago';
-
-            let paymentDataHtml = '';
-            if (group.paymentData && group.hasPaymentSent) {
-                paymentDataHtml = `
-                    <div class="payment-data-grid" style="grid-template-columns: 1fr;">
-                        <div class="data-item">
-                            <span class="data-label">Referencia</span>
-                            <span class="data-value">${group.paymentData.ref || '—'}</span>
-                        </div>
-                        <div class="data-item">
-                            <span class="data-label">Método</span>
-                            <span class="data-value">${group.paymentData.method || '—'}</span>
-                        </div>
-                    </div>
-                `;
-            }
-
-            let actionsHtml = '';
-            if (group.hasPaymentSent) {
-                actionsHtml = `
-                    <div class="payment-actions">
-                        <button class="btn-confirm" onclick="confirmPaymentBatch('${group.buyerDbName}')">
-                            <i data-lucide="check" class="w-3.5 h-3.5"></i> Confirmar Todo
-                        </button>
-                        <button class="btn-reject" onclick="rejectPaymentBatch('${group.buyerDbName}')">
-                            <i data-lucide="x" class="w-3.5 h-3.5"></i> Rechazar Todo
-                        </button>
-                    </div>
-                `;
-            } else {
-                actionsHtml = `
-                    <div class="payment-actions">
-                        <button class="btn-reject" onclick="rejectPaymentBatch('${group.buyerDbName}')">
-                            <i data-lucide="x" class="w-3.5 h-3.5"></i> Liberar Todo
-                        </button>
-                    </div>
-                `;
-            }
-
-            entry.innerHTML = `
-                <div class="flex items-center justify-between mb-1">
-                    <div class="flex items-center gap-2">
-                        <span class="text-white font-bold text-sm">${group.buyerDisplayName}</span>
-                        <span class="text-gray-400 text-xs">${group.cards.length} cartón(es) · $${totalAmount}</span>
-                    </div>
-                    <span class="payment-status ${statusClass}">${statusText}</span>
-                </div>
-                <div class="text-xs text-gray-500 mb-1">Cartones: ${cardSerials}</div>
-                ${paymentDataHtml}
-                ${actionsHtml}
-            `;
-
-            list.appendChild(entry);
-        });
-
-        if (window.lucide) window.lucide.createIcons();
-    }
-
-    // Asignar nombre del comprador al cartón en la vista del animador
-    function assignBuyerNameToCard(serial, buyerName) {
-        const cards = document.querySelectorAll('.bingo-card');
-        cards.forEach(card => {
-            if (card.dataset.cardIndex === String(serial)) {
-                const nameInput = card.querySelector('.card-name-input');
-                if (nameInput && !nameInput.value) {
-                    nameInput.value = buyerName;
-                }
-            }
-        });
-    }
-
     // Real-Time Listeners para pagos y reservas
     bingoChannel.on('broadcast', { event: 'card-purchased' }, (ev) => {
         const data = ev.payload;
