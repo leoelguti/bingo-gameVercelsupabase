@@ -1341,12 +1341,12 @@ async function confirmPaymentBatch(buyer) {
                     cardEl.classList.remove('reserved', 'payment-sent');
                     cardEl.classList.add('sold');
                 }
-                delete pendingPayments[s];
+                if (pendingPayments[s]) delete pendingPayments[s];
 
                 bingoChannel.send({
                     type: 'broadcast',
                     event: 'payment-confirmed',
-                    payload: { serial: s, status: 'confirmed' }
+                    payload: { serial: s, status: 'confirmed', buyerDbName: buyer }
                 });
             });
             renderPaymentsPanel();
@@ -1377,12 +1377,12 @@ async function rejectPaymentBatch(buyer) {
                     cardEl.classList.remove('payment-sent');
                     cardEl.classList.add('reserved');
                 }
-                pendingPayments[s].status = 'reserved';
+                if (pendingPayments[s]) pendingPayments[s].status = 'reserved';
 
                 bingoChannel.send({
                     type: 'broadcast',
                     event: 'card-purchased',
-                    payload: { serial: s, status: 'reserved', buyerName: buyer, timestamp: new Date() }
+                    payload: { serial: s, status: 'reserved', buyerDbName: buyer, timestamp: new Date() }
                 });
             });
             renderPaymentsPanel();

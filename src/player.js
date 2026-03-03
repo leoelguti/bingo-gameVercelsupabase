@@ -328,14 +328,16 @@ function initSocket() {
         const card = allCards.find(c => String(c.serial) === String(data.serial));
         if (card) card.status = 'confirmed';
 
-        if (myCards.has(String(data.serial))) {
+        if (data.buyerDbName === playerName) {
+            myCards.add(String(data.serial));
             myCardStatuses[data.serial] = 'confirmed';
+
             const idx = activePaymentSerials.indexOf(String(data.serial));
             if (idx !== -1) {
                 activePaymentSerials.splice(idx, 1);
-                if (activePaymentSerials.length === 0) {
-                    closePaymentModal();
-                }
+            }
+            if (activePaymentSerials.length === 0) {
+                closePaymentModal();
             }
             showToast(`¡Pago confirmado! Cartón #${data.serial} es tuyo.`, 'success');
         }
