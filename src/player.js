@@ -85,7 +85,7 @@ async function loginPlayer() {
     btn.innerHTML = '<span class="flex items-center justify-center gap-2"><div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Entrando...</span>';
 
     try {
-        const { data, error } = await supabase.from('bingo_users').select('*').eq('username', username).single();
+        const { data, error } = await supabase.from('bingo_users').select('*').eq('username', username).maybeSingle();
         if (error || !data) {
             showAuthError('Usuario no encontrado.');
             btn.disabled = false;
@@ -140,7 +140,7 @@ async function registerPlayer() {
 
     try {
         // Verificar si el usuario ya existe
-        const { data: existingUser } = await supabase.from('bingo_users').select('username').eq('username', username).single();
+        const { data: existingUser } = await supabase.from('bingo_users').select('username').eq('username', username).maybeSingle();
         if (existingUser) {
             showAuthError('El usuario ya existe.');
             btn.disabled = false;

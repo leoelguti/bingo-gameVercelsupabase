@@ -171,11 +171,15 @@ function executeNewGame() {
     document.querySelectorAll('.bingo-card').forEach(card => card.remove());
     document.getElementById('bingoCards').innerHTML = '';
 
-    // 3. Notificar a los participantes del reset
-    bingoChannel.send({ type: 'broadcast', event: 'game-reset', payload: {} });
-
-    // 4. Forzar el refrescamiento absoluto del navegador para limpiar la memoria JS
-    window.location.reload(true);
+    // 3. Limpiar Base de Datos y Notificar a los participantes del reset
+    supabase.from('bingo_cards').delete().neq('serial', '0').then(() => {
+        supabase.from('bingo_payments').delete().neq('status', 'ignore_all').then(() => {
+            supabase.from('bingo_game_state').update({ state: {} }).eq('id', 1).then(() => {
+                bingoChannel.send({ type: 'broadcast', event: 'game-reset', payload: {} });
+                window.location.reload(true);
+            });
+        });
+    });
 }
 
 //CODIGO NUEVO//CODIGO NUEVO//CODIGO NUEVO//CODIGO NUEVO//CODIGO NUEVO//CODIGO NUEVO
@@ -511,11 +515,22 @@ function generateCards() {
 
     numberPool = new BingoNumberPool();
     totalPrize = cardCount * cardPrice; // Calcular el premio total
+
+    const cardsData = [];
+
     for (let i = 0; i < cardCount; i++) {
         const card = generateBingoCard();
         const serial = nextCardSerial++;
         const cardElement = createBingoCardElement(card, serial, cardPrice);
         container.appendChild(cardElement);
+
+        cardsData.push({
+            serial: String(serial),
+            numbers: card,
+            price: cardPrice,
+            status: 'available',
+            buyer_name: null
+        });
     }
 
     cardsGenerated = true; // Marcar que los cartones han sido generados
@@ -530,19 +545,24 @@ function generateCards() {
     });
     document.getElementById('deleteSelectedCardsButton').disabled = false;
 
-    autoSave(); // Autoguardado al crear cartones
+    // Limpiar tabla de cartones e insertar los nuevos
+    supabase.from('bingo_cards').delete().neq('serial', '0').then(() => {
+        supabase.from('bingo_cards').insert(cardsData).then(() => {
+            autoSave(); // Autoguardado al crear cartones
 
-    // Registrar cartones en el servidor para la vista de participantes
-    bingoChannel.send({
-        type: 'broadcast',
-        event: 'cards-generated',
-        payload: {
-            cards: cardsData,
-            cardPrice: cardPrice,
-            gameMode: gameMode,
-            selectedFigure: selectedFigure,
-            gameId: currentGameId
-        }
+            // Registrar cartones en el servidor para la vista de participantes
+            bingoChannel.send({
+                type: 'broadcast',
+                event: 'cards-generated',
+                payload: {
+                    cards: cardsData,
+                    cardPrice: cardPrice,
+                    gameMode: gameMode,
+                    selectedFigure: selectedFigure,
+                    gameId: currentGameId
+                }
+            });
+        });
     });
 }
 
