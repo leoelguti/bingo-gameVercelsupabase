@@ -255,7 +255,7 @@ function initSocket() {
         }
     });
 
-    bingoChannel.on('broadcast', { event: 'cards-updated' }, (ev) => {
+    bingoChannel.on('broadcast', { event: 'cards-generated' }, (ev) => {
         const data = ev.payload;
         allCards = data.cards;
         cardPrice = data.cardPrice;
@@ -1026,11 +1026,14 @@ document.getElementById('submitPaymentBtn').addEventListener('click', async () =
     try {
         const totalAmount = activePaymentSerials.length * cardPrice;
 
+        const paymentMethod = document.getElementById('paymentMethod') ? document.getElementById('paymentMethod').value : 'Transferencia';
+        const referenceNumber = phone + ' / ' + bank + ' / ' + cedula;
+
         // Registrar en pagos
         const { error: insertErr } = await supabaseClient.from('bingo_payments').insert({
             buyer_name: playerName,
-            payment_method: document.getElementById('paymentMethod') ? document.getElementById('paymentMethod').value : 'Transferencia',
-            reference_number: phone + ' / ' + bank + ' / ' + cedula, // Simplificando los campos viejos en uno solo referencial
+            payment_method: paymentMethod,
+            reference_number: referenceNumber,
             amount: totalAmount,
             status: 'pending',
             cards: activePaymentSerials
@@ -1055,7 +1058,12 @@ document.getElementById('submitPaymentBtn').addEventListener('click', async () =
             bingoChannel.send({
                 type: 'broadcast',
                 event: 'card-purchased',
-                payload: { serial, status: 'payment_sent', buyerName: playerDisplayName }
+                payload: {
+                    serial,
+                    status: 'payment_sent',
+                    buyerName: playerDisplayName,
+                    paymentData: { method: paymentMethod, ref: referenceNumber, amount: totalAmount }
+                }
             });
         }
 

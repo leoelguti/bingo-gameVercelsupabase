@@ -1107,18 +1107,14 @@ document.addEventListener('DOMContentLoaded', () => {
             let paymentDataHtml = '';
             if (group.paymentData && group.hasPaymentSent) {
                 paymentDataHtml = `
-                    <div class="payment-data-grid">
+                    <div class="payment-data-grid" style="grid-template-columns: 1fr;">
                         <div class="data-item">
-                            <span class="data-label">Teléfono</span>
-                            <span class="data-value">${group.paymentData.phone || '—'}</span>
+                            <span class="data-label">Referencia</span>
+                            <span class="data-value">${group.paymentData.ref || '—'}</span>
                         </div>
                         <div class="data-item">
-                            <span class="data-label">Banco</span>
-                            <span class="data-value">${group.paymentData.bank || '—'}</span>
-                        </div>
-                        <div class="data-item">
-                            <span class="data-label">Cédula</span>
-                            <span class="data-value">${group.paymentData.cedula || '—'}</span>
+                            <span class="data-label">Método</span>
+                            <span class="data-value">${group.paymentData.method || '—'}</span>
                         </div>
                     </div>
                 `;
@@ -1178,7 +1174,55 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Real-Time Listeners para pagos y reservas
+    bingoChannel.on('broadcast', { event: 'card-purchased' }, (ev) => {
+        const data = ev.payload;
+        if (data.status === 'payment_sent') {
+            if (pendingPayments[data.serial]) {
+                pendingPayments[data.serial].status = 'payment_sent';
+                if (data.paymentData) pendingPayments[data.serial].paymentData = data.paymentData;
+            } else {
+                pendingPayments[data.serial] = {
+                    buyer: data.buyerName,
+                    status: 'payment_sent',
+                    paymentData: data.paymentData || { ref: "Actualice para ver", method: "-" },
+                    reservedAt: data.timestamp
+                };
+            }
+            showMessage(`"${data.buyerName}" envió pago para el cartón #${data.serial}`);
+        } else {
+            pendingPayments[data.serial] = {
+                buyer: data.buyerName,
+                status: data.status || 'reserved',
+                paymentData: null,
+                reservedAt: data.timestamp
+            };
+            showMessage(`"${data.buyerName}" reservó el cartón #${data.serial}`);
+        }
+        assignBuyerNameToCard(data.serial, data.buyerName);
+        renderPaymentsPanel();
+    });
 
+    bingoChannel.on('broadcast', { event: 'card-released' }, (ev) => {
+        const data = ev.payload;
+        delete pendingPayments[data.serial];
+        renderPaymentsPanel();
+        const cards = document.querySelectorAll('.bingo-card');
+        cards.forEach(card => {
+            if (card.dataset.cardIndex === String(data.serial)) {
+                const nameInput = card.querySelector('.card-name-input');
+                if (nameInput && nameInput.value === data.buyerName) {
+                    nameInput.value = '';
+                }
+            }
+        });
+    });
+
+    bingoChannel.on('broadcast', { event: 'payment-confirmed' }, (ev) => {
+        const data = ev.payload;
+        delete pendingPayments[data.serial];
+        renderPaymentsPanel();
+    });
 
     // Cargar pagos pendientes al inicio
     supabaseClient.from('bingo_payments')
