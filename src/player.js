@@ -719,7 +719,7 @@ async function checkoutCart() {
 
     try {
         // 1. Validar que los cartones sigan disponibles
-        const { data: checkCards, error: checkErr } = await supabase
+        const { data: checkCards, error: checkErr } = await supabaseClient
             .from('bingo_cards')
             .select('serial, status')
             .in('serial', serials);
@@ -738,7 +738,7 @@ async function checkoutCart() {
 
         // 2. Reservar en Supabase
         const reservedAt = new Date().toISOString();
-        const { error: updateErr } = await supabase
+        const { error: updateErr } = await supabaseClient
             .from('bingo_cards')
             .update({ status: 'reserved', buyer_name: playerName })
             .in('serial', serials);
@@ -1037,7 +1037,7 @@ document.getElementById('submitPaymentBtn').addEventListener('click', async () =
         if (insertErr) throw insertErr;
 
         // Actualizar cartones
-        const { error: updateErr } = await supabase
+        const { error: updateErr } = await supabaseClient
             .from('bingo_cards')
             .update({ status: 'payment_sent' })
             .in('serial', activePaymentSerials);
@@ -1083,7 +1083,7 @@ document.getElementById('cancelReservationBtn').addEventListener('click', async 
     if (activePaymentSerials.length === 0) return;
 
     try {
-        const { error: updateErr } = await supabase
+        const { error: updateErr } = await supabaseClient
             .from('bingo_cards')
             .update({ status: 'available', buyer_name: null })
             .in('serial', activePaymentSerials);
