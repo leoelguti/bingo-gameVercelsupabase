@@ -5,8 +5,8 @@
 let playerName = '';
 const supabaseUrl = 'https://rhzgfxbunkbqqkgiregs.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJoemdmeGJ1bmticXFrZ2lyZWdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1MjA0MTgsImV4cCI6MjA4ODA5NjQxOH0.eMcZdTUP7zvUUhMos-IGQF2Bhh53_V1_vGtB1hDlbAM';
-const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-const bingoChannel = supabase.channel('bingo-room');
+const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+const bingoChannel = supabaseClient.channel('bingo-room');
 let calledNumbers = new Set();
 let myCards = new Set();       // Serials de mis cartones (cualquier estado)
 let myCardStatuses = {};       // { serial: 'reserved' | 'payment_sent' | 'confirmed' }
@@ -85,7 +85,7 @@ async function loginPlayer() {
     btn.innerHTML = '<span class="flex items-center justify-center gap-2"><div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Entrando...</span>';
 
     try {
-        const { data, error } = await supabase.from('bingo_users').select('*').eq('username', username).maybeSingle();
+        const { data, error } = await supabaseClient.from('bingo_users').select('*').eq('username', username).maybeSingle();
         if (error || !data) {
             showAuthError('Usuario no encontrado.');
             btn.disabled = false;
@@ -140,7 +140,7 @@ async function registerPlayer() {
 
     try {
         // Verificar si el usuario ya existe
-        const { data: existingUser } = await supabase.from('bingo_users').select('username').eq('username', username).maybeSingle();
+        const { data: existingUser } = await supabaseClient.from('bingo_users').select('username').eq('username', username).maybeSingle();
         if (existingUser) {
             showAuthError('El usuario ya existe.');
             btn.disabled = false;
@@ -150,7 +150,7 @@ async function registerPlayer() {
         }
 
         const newUser = { username, password, display_name: displayName, role: 'player' };
-        const { error } = await supabase.from('bingo_users').insert(newUser);
+        const { error } = await supabaseClient.from('bingo_users').insert(newUser);
 
         if (!error) {
             const user = { username: newUser.username, displayName: newUser.display_name, role: newUser.role };
@@ -526,9 +526,9 @@ function setConnectionStatus(connected) {
 async function loadInitialState() {
     try {
         const [cardsRes, stateRes, configRes] = await Promise.all([
-            supabase.from('bingo_cards').select('*'),
-            supabase.from('bingo_game_state').select('state').eq('id', 1).single(),
-            supabase.from('bingo_payment_config').select('methods').eq('id', 1).single()
+            supabaseClient.from('bingo_cards').select('*'),
+            supabaseClient.from('bingo_game_state').select('state').eq('id', 1).single(),
+            supabaseClient.from('bingo_payment_config').select('methods').eq('id', 1).single()
         ]);
 
         if (!cardsRes.error && cardsRes.data) {
@@ -1025,7 +1025,7 @@ document.getElementById('submitPaymentBtn').addEventListener('click', async () =
         const totalAmount = activePaymentSerials.length * cardPrice;
 
         // Registrar en pagos
-        const { error: insertErr } = await supabase.from('bingo_payments').insert({
+        const { error: insertErr } = await supabaseClient.from('bingo_payments').insert({
             buyer_name: playerName,
             payment_method: document.getElementById('paymentMethod') ? document.getElementById('paymentMethod').value : 'Transferencia',
             reference_number: phone + ' / ' + bank + ' / ' + cedula, // Simplificando los campos viejos en uno solo referencial
@@ -1723,13 +1723,15 @@ function submitWinnerPaymentData() {
         return;
     }
 
-    if (socket) {
-        socket.emit('winner-payment-data', {
+    bingoChannel.send({
+        type: 'broadcast',
+        event: 'winner-payment-data',
+        payload: {
             playerName,
             gameId: currentGameId,
             paymentData: { name, cedula, bank, phone }
-        });
-    }
+        }
+    });
 
     showToast('✅ Datos enviados. El animador te contactar\u00e1 para el pago.', 'success');
     const overlay = document.getElementById('playerGameEndedOverlay');
@@ -1838,15 +1840,17 @@ function submitWinnerPayDataModal(cardSerial, prizeType, gameId) {
         return;
     }
 
-    if (socket) {
-        socket.emit('winner-payment-data', {
+    bingoChannel.send({
+        type: 'broadcast',
+        event: 'winner-payment-data',
+        payload: {
             playerName,
             gameId,
             cardSerial,
             prizeType,
             paymentData: { name, cedula, phone, bank, method }
-        });
-    }
+        }
+    });
 
     showToast('✅ Datos enviados. El animador te contactará para el pago.', 'success');
     const overlay = document.getElementById('winnerPayDataOverlay');

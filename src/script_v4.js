@@ -1,7 +1,7 @@
 const supabaseUrl = 'https://rhzgfxbunkbqqkgiregs.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJoemdmeGJ1bmticXFrZ2lyZWdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1MjA0MTgsImV4cCI6MjA4ODA5NjQxOH0.eMcZdTUP7zvUUhMos-IGQF2Bhh53_V1_vGtB1hDlbAM';
-const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-const bingoChannel = supabase.channel('bingo-room');
+const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
+const bingoChannel = supabaseClient.channel('bingo-room');
 
 bingoChannel.subscribe((status) => {
     if (status === 'SUBSCRIBED') {
@@ -64,7 +64,7 @@ function autoSave() {
     }
 
     if (window.location.protocol !== 'file:') {
-        supabase.from('bingo_game_state').update({ state: gameState }).eq('id', 1).then(({ error }) => {
+        supabaseClient.from('bingo_game_state').update({ state: gameState }).eq('id', 1).then(({ error }) => {
             if (error) console.error('Error auto-saving to Supabase:', error);
         });
     }
@@ -172,9 +172,9 @@ function executeNewGame() {
     document.getElementById('bingoCards').innerHTML = '';
 
     // 3. Limpiar Base de Datos y Notificar a los participantes del reset
-    supabase.from('bingo_cards').delete().neq('serial', '0').then(() => {
-        supabase.from('bingo_payments').delete().neq('status', 'ignore_all').then(() => {
-            supabase.from('bingo_game_state').update({ state: {} }).eq('id', 1).then(() => {
+    supabaseClient.from('bingo_cards').delete().neq('serial', '0').then(() => {
+        supabaseClient.from('bingo_payments').delete().neq('status', 'ignore_all').then(() => {
+            supabaseClient.from('bingo_game_state').update({ state: {} }).eq('id', 1).then(() => {
                 bingoChannel.send({ type: 'broadcast', event: 'game-reset', payload: {} });
                 window.location.reload(true);
             });
@@ -546,8 +546,8 @@ function generateCards() {
     document.getElementById('deleteSelectedCardsButton').disabled = false;
 
     // Limpiar tabla de cartones e insertar los nuevos
-    supabase.from('bingo_cards').delete().neq('serial', '0').then(() => {
-        supabase.from('bingo_cards').insert(cardsData).then(() => {
+    supabaseClient.from('bingo_cards').delete().neq('serial', '0').then(() => {
+        supabaseClient.from('bingo_cards').insert(cardsData).then(() => {
             autoSave(); // Autoguardado al crear cartones
 
             // Registrar cartones en el servidor para la vista de participantes
@@ -1178,134 +1178,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Socket.IO listeners para pagos
-    if (socket) {
-        socket.on('card-purchased', (data) => {
-            pendingPayments[data.serial] = {
-                buyer: data.buyer,
-                status: data.status || 'reserved',
-                paymentData: null,
-                reservedAt: data.reservedAt
-            };
-            assignBuyerNameToCard(data.serial, data.buyer);
-            renderPaymentsPanel();
-            showMessage(`"${data.buyer}" reservó el cartón #${data.serial}`);
-        });
 
-        socket.on('payment-submitted', (data) => {
-            if (pendingPayments[data.serial]) {
-                pendingPayments[data.serial].status = 'payment_sent';
-                pendingPayments[data.serial].paymentData = data.paymentData;
-            } else {
-                pendingPayments[data.serial] = {
-                    buyer: data.buyer,
-                    status: 'payment_sent',
-                    paymentData: data.paymentData,
-                    reservedAt: null
-                };
-            }
-            renderPaymentsPanel();
-            showMessage(`"${data.buyer}" envió comprobante de pago para cartón #${data.serial}`);
-        });
-
-        socket.on('payment-confirmed', (data) => {
-            delete pendingPayments[data.serial];
-            renderPaymentsPanel();
-        });
-
-        socket.on('card-released', (data) => {
-            delete pendingPayments[data.serial];
-            renderPaymentsPanel();
-            const cards = document.querySelectorAll('.bingo-card');
-            cards.forEach(card => {
-                if (card.dataset.cardIndex === String(data.serial)) {
-                    const nameInput = card.querySelector('.card-name-input');
-                    if (nameInput && nameInput.value === data.buyer) {
-                        nameInput.value = '';
-                    }
-                }
-            });
-        });
-
-        socket.on('game-paused', (data) => {
-            // Bloquear generación de bolas
-            const genBtn = document.getElementById('generateNumber');
-            if (genBtn) genBtn.disabled = true;
-
-            // Use the unified winner verification modal
-            const overlay = document.getElementById('winnerQuestionOverlay');
-            const overlayText = document.getElementById('winnerQuestionText');
-            const winnerCardImage = document.getElementById('winnerCardImage');
-            const yesButton = document.getElementById('winnerYes');
-            const noButton = document.getElementById('winnerNo');
-
-            // Find and capture the card
-            const cardEl = document.querySelector(`.bingo-card[data-card-index="${data.cardSerial}"]`);
-            const modalTitle = document.querySelector('#winnerModalContent h2');
-            if (modalTitle) modalTitle.textContent = `🎤 "${data.playerName}" cantó ${data.claimType}`;
-            overlayText.textContent = `Cartón #${data.cardSerial} — Verifique el cartón del jugador`;
-
-            if (cardEl) {
-                html2canvas(cardEl, { backgroundColor: '#0f172a', scale: 2 }).then(canvas => {
-                    winnerCardImage.src = canvas.toDataURL('image/png');
-                    winnerCardImage.style.display = '';
-                }).catch(() => {
-                    winnerCardImage.style.display = 'none';
-                });
-            } else {
-                winnerCardImage.style.display = 'none';
-            }
-
-            yesButton.textContent = '✓ Válido';
-            noButton.textContent = '✗ Inválido';
-
-            yesButton.onclick = () => {
-                overlay.classList.add('hidden');
-                resolveClaimFromAnimator(data.playerName, data.cardSerial, data.claimType, true);
-            };
-            noButton.onclick = () => {
-                overlay.classList.add('hidden');
-                resolveClaimFromAnimator(data.playerName, data.cardSerial, data.claimType, false);
-            };
-
-            overlay.classList.remove('hidden');
-            document.getElementById('winnerModalContent').classList.add('scale-100');
-            document.getElementById('winnerModalContent').classList.remove('scale-95');
-        });
-
-        socket.on('claim-result', (data) => {
-            // Re-habilitar generación de bolas
-            const genBtn = document.getElementById('generateNumber');
-            if (genBtn) genBtn.disabled = false;
-
-            const overlay = document.getElementById('winnerQuestionOverlay');
-            overlay.classList.add('hidden');
-
-            const msgBox = document.getElementById('messageBox');
-            msgBox.classList.add('hidden');
-            document.getElementById('closeMessageBox').style.display = '';
-
-            if (data.valid) {
-                showMessage(`✅ "${data.playerName}" ganó ${data.claimType} con cartón #${data.cardSerial}. ¡Verificado!`);
-            } else {
-                showMessage(`❌ Claim de "${data.playerName}" (${data.claimType}) fue rechazado. El juego continúa.`);
-            }
-        });
-
-        // === GAME-ENDED: Bingo validated, show post-game modal ===
-        socket.on('game-ended', (data) => {
-            allTimeWinnersCache = data.allTimeWinners || [];
-            showGameEndedModal(data);
-        });
-
-        // === GAME-BREAK: Receso ===
-        socket.on('game-break', (data) => {
-            showMessage(`⏸️ Receso de ${data.minutes} minuto(s). El juego se reanudará pronto.`);
-        });
-    }
 
     // Cargar pagos pendientes al inicio
-    supabase.from('bingo_payments')
+    supabaseClient.from('bingo_payments')
         .select('*')
         .eq('status', 'pending')
         .then(({ data, error }) => {
@@ -1334,7 +1210,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Payment Config (Datos de pago del animador)
     // ============================================================
     // Cargar config existente
-    supabase.from('bingo_payment_config')
+    supabaseClient.from('bingo_payment_config')
         .select('methods')
         .eq('id', 1)
         .single()
@@ -1366,7 +1242,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (phone) methods.push({ type: 'pago_movil', telefono: phone, cedula: cedula });
             if (bank) methods.push({ type: 'transferencia', banco: bank, cuenta: bank, cedula: cedula });
 
-            const { error } = await supabase.from('bingo_payment_config').update({ methods }).eq('id', 1);
+            const { error } = await supabaseClient.from('bingo_payment_config').update({ methods }).eq('id', 1);
             if (!error) {
                 const statusEl = document.getElementById('payConfigStatus');
                 statusEl.textContent = '✓ Datos guardados y emitidos a jugadores';
@@ -1395,12 +1271,12 @@ document.addEventListener('DOMContentLoaded', () => {
 // Batch confirm (all cards of a buyer)
 async function confirmPaymentBatch(buyer) {
     try {
-        const { data: cardsToConfirm } = await supabase.from('bingo_cards').select('serial').eq('buyer_name', buyer).eq('status', 'payment_sent');
+        const { data: cardsToConfirm } = await supabaseClient.from('bingo_cards').select('serial').eq('buyer_name', buyer).eq('status', 'payment_sent');
         if (cardsToConfirm && cardsToConfirm.length > 0) {
             const serials = cardsToConfirm.map(c => String(c.serial));
 
-            await supabase.from('bingo_cards').update({ status: 'confirmed' }).in('serial', serials);
-            await supabase.from('bingo_payments').update({ status: 'approved' }).eq('buyer_name', buyer).eq('status', 'pending');
+            await supabaseClient.from('bingo_cards').update({ status: 'confirmed' }).in('serial', serials);
+            await supabaseClient.from('bingo_payments').update({ status: 'approved' }).eq('buyer_name', buyer).eq('status', 'pending');
 
             showMessage(`Pago de "${buyer}" confirmado (${serials.length} cartones).`);
 
@@ -1431,12 +1307,12 @@ async function confirmPaymentBatch(buyer) {
 // Batch reject (all cards of a buyer)
 async function rejectPaymentBatch(buyer) {
     try {
-        const { data: cardsToReject } = await supabase.from('bingo_cards').select('serial').eq('buyer_name', buyer).eq('status', 'payment_sent');
+        const { data: cardsToReject } = await supabaseClient.from('bingo_cards').select('serial').eq('buyer_name', buyer).eq('status', 'payment_sent');
         if (cardsToReject && cardsToReject.length > 0) {
             const serials = cardsToReject.map(c => String(c.serial));
 
-            await supabase.from('bingo_cards').update({ status: 'reserved' }).in('serial', serials);
-            await supabase.from('bingo_payments').update({ status: 'rejected' }).eq('buyer_name', buyer).eq('status', 'pending');
+            await supabaseClient.from('bingo_cards').update({ status: 'reserved' }).in('serial', serials);
+            await supabaseClient.from('bingo_payments').update({ status: 'rejected' }).eq('buyer_name', buyer).eq('status', 'pending');
 
             showMessage(`Cartones de "${buyer}" liberados (${serials.length}).`);
 
@@ -1463,81 +1339,22 @@ async function rejectPaymentBatch(buyer) {
     }
 }
 
-// Keep legacy single-card functions for compatibility
-async function confirmPayment(serial) {
-    try {
-        const res = await fetch(`/api/cards/${serial}/confirm-payment`, { method: 'POST' });
-        const data = await res.json();
-        if (res.ok) {
-            showMessage(`Pago del cartón #${serial} confirmado.`);
-        } else {
-            showMessage(data.error || 'Error al confirmar.');
-        }
-    } catch (err) {
-        console.error('Error confirmando pago:', err);
-    }
-}
 
-async function rejectPayment(serial) {
-    try {
-        const res = await fetch(`/api/cards/${serial}/reject-payment`, { method: 'POST' });
-        const data = await res.json();
-        if (res.ok) {
-            showMessage(`Cartón #${serial} liberado.`);
-        } else {
-            showMessage(data.error || 'Error al rechazar.');
-        }
-    } catch (err) {
-        console.error('Error rechazando pago:', err);
-    }
-}
-
-// ============================================================
-// Socket listener: game-started — ventas cerradas, recalcular pote
-// ============================================================
-if (socket) {
-    socket.on('game-started', (data) => {
-        console.log(`[ANIMATOR] Partida iniciada. Cartones en juego: ${data.soldCount}, Removidos: ${data.removedCount}`);
-
-        // Eliminar del DOM los cartones que no están en la lista de vendidos
-        const soldSerials = new Set(data.cards.map(c => String(c.serial)));
-        const container = document.getElementById('bingoCards');
-        const allCardElements = container.querySelectorAll('.bingo-card');
-
-        allCardElements.forEach(cardEl => {
-            const serial = String(cardEl.dataset.cardIndex);
-            if (!soldSerials.has(serial)) {
-                cardEl.remove();
-            }
-        });
-
-        // Actualizar el pote con los datos del servidor
-        totalPrize = data.totalPrize;
-        recalculatePrizes();
-
-        // Mostrar mensaje informativo
-        if (data.removedCount > 0) {
-            showMessage(`🎯 Partida iniciada. ${data.removedCount} cartón(es) no vendido(s) eliminado(s). Pote recalculado: $${data.totalPrize.toFixed(2)}`);
-        } else {
-            showMessage(`🎯 Partida iniciada. Todos los cartones fueron vendidos. Pote: $${data.totalPrize.toFixed(2)}`);
-        }
-
-        autoSave();
-    });
-}
 
 // ============================================================
 // Resolve Claim from animator (Verificar o rechazar canto)
 // ============================================================
 function resolveClaimFromAnimator(playerName, cardSerial, claimType, valid) {
-    if (socket) {
-        socket.emit('claim-result', {
-            playerName,
-            cardSerial,
-            claimType,
-            valid
-        });
-    }
+    bingoChannel.send({
+        type: 'broadcast',
+        event: 'claim-result',
+        payload: {
+            valid: valid,
+            playerName: playerName,
+            cardSerial: cardSerial,
+            claimType: claimType
+        }
+    });
     // Cerrar el mensaje y el modal de verificación
     const msgBox = document.getElementById('messageBox');
     msgBox.classList.add('hidden');
@@ -1593,7 +1410,7 @@ function showGameEndedModal(data) {
 function showBreakPrompt() {
     const minutes = prompt('¿Cuántos minutos de receso?', '5');
     if (minutes && !isNaN(parseInt(minutes))) {
-        if (socket) socket.emit('game-break', { minutes: parseInt(minutes) });
+        bingoChannel.send({ type: 'broadcast', event: 'game-break', payload: { minutes: parseInt(minutes) } });
         document.getElementById('gameEndedOverlay').classList.add('hidden');
         showMessage(`⏸️ Receso de ${minutes} minuto(s) notificado a todos los jugadores.`);
     }
@@ -1712,7 +1529,7 @@ async function submitWinnerPayment() {
         return;
     }
 
-    supabase.from('bingo_winners').update({ payment_status: 'paid' }).eq('card_index', cardSerial).eq('prize_type', mode).then(({ error }) => {
+    supabaseClient.from('bingo_winners').update({ payment_status: 'paid' }).eq('card_index', cardSerial).eq('prize_type', mode).then(({ error }) => {
         if (!error) {
             showMessage(`✅ Pago de $${amount} registrado para cartón #${cardSerial}.`);
             closeWinnerPaymentForm();
