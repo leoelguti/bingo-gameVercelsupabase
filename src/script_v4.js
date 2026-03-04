@@ -24,6 +24,7 @@ let messageTimeout = null;
 let cardPrice = 10;
 let currentGameId = '';
 let allTimeWinnersCache = [];
+let gameStarted = false; // Flag para saber si la partida ya comenzó
 //CODIGO NUEVO//CODIGO NUEVO//CODIGO NUEVO//CODIGO NUEVO//CODIGO NUEVO//CODIGO NUEVO
 let pendingPayments = {}; // { serial: { buyer, status, paymentData, reservedAt } }
 
@@ -147,6 +148,7 @@ function getGameState() {
         currentNumber,
         isAnimating,
         gameMode,
+        gameStarted,
         winners: Array.from(winners),
         lastBalls,
         ballCount,
@@ -155,6 +157,7 @@ function getGameState() {
         selectedFigure,
         cardsGenerated,
         nextCardSerial,
+        currentGameId,
         cards: Array.from(document.querySelectorAll('.bingo-card')).map(card => ({
             index: card.dataset.cardIndex,
             name: card.querySelector('.card-name-input').value,
@@ -207,6 +210,8 @@ const applyGameState = (gameState) => {
     currentNumber = gameState.currentNumber;
     isAnimating = gameState.isAnimating;
     gameMode = gameState.gameMode;
+    gameStarted = gameState.gameStarted || false;
+    currentGameId = gameState.currentGameId || '';
     winners = new Set(gameState.winners);
     lastBalls = gameState.lastBalls || [];
     ballCount = gameState.ballCount || 0;
@@ -286,7 +291,10 @@ function executeNewGame() {
     document.querySelectorAll('.bingo-card').forEach(card => card.remove());
     document.getElementById('bingoCards').innerHTML = '';
 
-    // 3. Limpiar Base de Datos y Notificar a los participantes del reset
+    // 3. Reset gameStarted flag
+    gameStarted = false;
+
+    // 4. Limpiar Base de Datos y Notificar a los participantes del reset
     supabaseClient.from('bingo_cards').delete().neq('serial', '0').then(() => {
         supabaseClient.from('bingo_payments').delete().neq('status', 'ignore_all').then(() => {
             supabaseClient.from('bingo_game_state').update({ state: {} }).eq('id', 1).then(() => {
@@ -423,6 +431,61 @@ function finalizeNumberGeneration(number) {
 
     isAnimating = false; // Permitir generar otro número
     markNumberInCards(number);
+
+    // === GAME-STARTED: emitir al primer número si no se ha iniciado ===
+    if (!gameStarted) {
+        gameStarted = true;
+
+        // Retirar cartones no vendidos (available) y recalcular pote
+        supabaseClient.from('bingo_cards').select('*').then(({ data: dbCards }) => {
+            if (!dbCards) return;
+
+            const unsold = dbCards.filter(c => c.status === 'available');
+            const sold = dbCards.filter(c => c.status === 'confirmed');
+            const removedCount = unsold.length;
+
+            // Eliminar cartones no vendidos de la BD
+            if (unsold.length > 0) {
+                const unsoldSerials = unsold.map(c => c.serial);
+                supabaseClient.from('bingo_cards').delete().in('serial', unsoldSerials);
+
+                // Eliminar de la vista local del animador
+                unsoldSerials.forEach(serial => {
+                    const cardEl = document.querySelector(`.bingo-card[data-card-index="${serial}"]`);
+                    if (cardEl && !cardEl.querySelector('.card-name-input').value.trim()) {
+                        cardEl.remove();
+                    }
+                });
+            }
+
+            // Recalcular pote solo con cartones vendidos
+            totalPrize = sold.length * cardPrice;
+            recalculatePrizes();
+
+            // Preparar datos de los cartones vendidos para enviar a jugadores
+            const cardsForPlayers = sold.map(c => ({
+                serial: c.serial,
+                numbers: c.numbers,
+                status: c.status,
+                buyer: c.buyer_name,
+                buyer_name: c.buyer_name,
+                price: c.price
+            }));
+
+            bingoChannel.send({
+                type: 'broadcast',
+                event: 'game-started',
+                payload: {
+                    cards: cardsForPlayers,
+                    totalPrize: totalPrize,
+                    gameMode: gameMode,
+                    selectedFigure: selectedFigure,
+                    gameId: currentGameId,
+                    removedCount: removedCount
+                }
+            });
+        });
+    }
 
     // Emitir la bola a los participantes via Supabase
     bingoChannel.send({
@@ -620,6 +683,9 @@ function generateCards() {
     // winners.clear(); // PROTECCION AL HISTORIAL DE GANADORES INTERPARTIDAS
     const figureModeCheckbox = document.getElementById('figureMode');
     gameMode = figureModeCheckbox.checked ? 'figure' : 'line';
+    gameStarted = false; // Reset para que la nueva ronda emita game-started
+    ballCount = 0;
+    lastBalls = [];
 
     // Generate unique game ID
     currentGameId = Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
@@ -805,8 +871,8 @@ async function checkWinners() {
 
         if (anyWinnerSang) {
             let nextMode = gameMode;
+            let isBingoWin = false;
             if (gameMode === 'figure') {
-                showNewGameConfirm();
                 nextMode = 'line';
                 gameMode = 'line';
                 document.getElementById('gameMode').textContent = 'Modo: Línea';
@@ -814,6 +880,8 @@ async function checkWinners() {
                 nextMode = 'bingo';
                 gameMode = 'bingo';
                 document.getElementById('gameMode').textContent = 'Modo: Bingo';
+            } else if (gameMode === 'bingo') {
+                isBingoWin = true;
             }
 
             // Notificar ganador a los participantes
@@ -824,9 +892,27 @@ async function checkWinners() {
                     payload: {
                         cardIndex: winner.cardIndex,
                         prizeType: winner.prizeType,
-                        nextMode: nextMode
+                        nextMode: nextMode,
+                        gameId: currentGameId
                     }
                 });
+            }
+
+            // === GAME-ENDED: Si el Bingo fue ganado, emitir fin de partida ===
+            if (isBingoWin) {
+                const gameEndedData = {
+                    gameId: currentGameId,
+                    totalPrize: totalPrize,
+                    winners: allTimeWinnersCache.filter(w => w.gameId === currentGameId)
+                };
+
+                bingoChannel.send({
+                    type: 'broadcast',
+                    event: 'game-ended',
+                    payload: gameEndedData
+                });
+
+                showGameEndedModal(gameEndedData);
             }
         }
     }
@@ -975,6 +1061,29 @@ function updateWinnersLog(cardIndex, prizeType, markedNumbers) {
     // Remover el mensaje inicial si existe
     const emptyMessage = winnersLog.querySelector('.italic');
     if (emptyMessage) emptyMessage.remove();
+
+    // Obtener nombre del jugador del cartón
+    const cardEl = document.querySelector(`.bingo-card[data-card-index="${cardIndex}"]`);
+    const playerName = cardEl ? (cardEl.querySelector('.card-name-input').value || 'Anónimo') : 'Anónimo';
+
+    // === GUARDAR GANADOR EN BASE DE DATOS ===
+    supabaseClient.from('bingo_winners').insert({
+        card_index: String(cardIndex),
+        prize_type: prizeType,
+        player_name: playerName,
+        game_id: currentGameId,
+        payment_status: 'pending'
+    }).then(({ error }) => {
+        if (error) console.error('Error guardando ganador en BD:', error);
+    });
+
+    // Agregar al cache local
+    allTimeWinnersCache.push({
+        cardIndex: String(cardIndex),
+        prizeType,
+        playerName,
+        gameId: currentGameId
+    });
 
     let icon = 'award';
     let colorClass = 'text-emerald-400';
@@ -1238,23 +1347,34 @@ document.addEventListener('DOMContentLoaded', () => {
     supabaseClient.from('bingo_payments')
         .select('*')
         .eq('status', 'pending')
-        .then(({ data, error }) => {
+        .then(async ({ data, error }) => {
             if (error) {
                 console.error('Error cargando pagos pendientes:', error);
                 return;
             }
             if (data && data.length > 0) {
+                // Cargar display names de los compradores
+                const buyerNames = [...new Set(data.map(p => p.buyer_name).filter(Boolean))];
+                let displayNameMap = {};
+                if (buyerNames.length > 0) {
+                    const { data: users } = await supabaseClient.from('bingo_users').select('username, display_name').in('username', buyerNames);
+                    if (users) {
+                        users.forEach(u => { displayNameMap[u.username] = u.display_name; });
+                    }
+                }
+
                 data.forEach(p => {
                     const cardsArray = Array.isArray(p.cards) ? p.cards : [];
+                    const displayName = displayNameMap[p.buyer_name] || p.buyer_name;
                     cardsArray.forEach(serial => {
                         pendingPayments[serial] = {
                             buyerDbName: p.buyer_name, // primary key
-                            buyer: p.buyer_name, // fallback for legacy
+                            buyer: displayName, // display name for UI
                             status: 'payment_sent',
                             paymentData: { method: p.payment_method, ref: p.reference_number, amount: p.amount },
                             reservedAt: p.created_at
                         };
-                        assignBuyerNameToCard(serial, p.buyer_name);
+                        assignBuyerNameToCard(serial, displayName);
                     });
                 });
                 renderPaymentsPanel();
@@ -1314,6 +1434,19 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (err) {
             console.error('Error guardando config de pago:', err);
+        }
+    });
+
+    // Cargar historial de ganadores desde la BD
+    supabaseClient.from('bingo_winners').select('*').order('created_at', { ascending: false }).then(({ data, error }) => {
+        if (!error && data) {
+            allTimeWinnersCache = data.map(w => ({
+                cardIndex: w.card_index,
+                prizeType: w.prize_type,
+                playerName: w.player_name,
+                gameId: w.game_id || 'Sin ID',
+                paymentStatus: w.payment_status
+            }));
         }
     });
 
@@ -1616,4 +1749,84 @@ bingoChannel.on('broadcast', { event: 'player-claims-win' }, (event) => {
 bingoChannel.on('broadcast', { event: 'claim-result' }, (event) => {
     // Escuchar el resultado emitido por otro animador (si hubiera varios en la misma sala)
     // Opcionalmente podemos actualizar la interfaz si el resultado del claim es valido
+});
+
+// ============================================================
+// updateTotalPot — Recalcula el pote basado en cartones confirmados
+// ============================================================
+function updateTotalPot() {
+    supabaseClient.from('bingo_cards').select('serial, price').eq('status', 'confirmed').then(({ data, error }) => {
+        if (!error && data) {
+            totalPrize = data.reduce((sum, c) => sum + (parseFloat(c.price) || cardPrice), 0);
+            recalculatePrizes();
+        }
+    });
+}
+
+// ============================================================
+// Escuchar datos de pago del ganador enviados por jugadores
+// ============================================================
+bingoChannel.on('broadcast', { event: 'winner-payment-data' }, (event) => {
+    const data = event.payload;
+    showMessage(`✉️ Datos de pago recibidos de "${data.playerName}" para la partida ${data.gameId || ''}.`);
+
+    // Guardar en bingo_winners
+    if (data.cardSerial && data.prizeType) {
+        supabaseClient.from('bingo_winners')
+            .update({ winner_payment_data: data.paymentData })
+            .eq('card_index', String(data.cardSerial))
+            .eq('prize_type', data.prizeType)
+            .then(({ error }) => {
+                if (error) console.error('Error guardando datos de pago del ganador:', error);
+            });
+    } else if (data.gameId) {
+        // Fallback: guardar por game_id y player_name
+        supabaseClient.from('bingo_winners')
+            .update({ winner_payment_data: data.paymentData })
+            .eq('game_id', data.gameId)
+            .eq('player_name', data.playerName)
+            .is('winner_payment_data', null)
+            .then(({ error }) => {
+                if (error) console.error('Error guardando datos de pago del ganador:', error);
+            });
+    }
+});
+
+// ============================================================
+// Sync State — enviar estado completo a jugadores que lo soliciten
+// ============================================================
+bingoChannel.on('broadcast', { event: 'request-sync' }, () => {
+    // Obtener datos actualizados de cartones desde la BD
+    supabaseClient.from('bingo_cards').select('*').then(({ data: dbCards }) => {
+        const cards = (dbCards || []).map(c => ({
+            serial: c.serial,
+            numbers: c.numbers,
+            status: c.status,
+            buyer: c.buyer_name,
+            buyer_name: c.buyer_name,
+            price: c.price
+        }));
+
+        // Cargar payment config
+        supabaseClient.from('bingo_payment_config').select('methods').eq('id', 1).single().then(({ data: configData }) => {
+            bingoChannel.send({
+                type: 'broadcast',
+                event: 'sync-state',
+                payload: {
+                    calledNumbers: Array.from(calledNumbers),
+                    cards: cards,
+                    cardPrice: cardPrice,
+                    currentNumber: currentNumber,
+                    lastBalls: lastBalls,
+                    ballCount: ballCount,
+                    gameMode: gameMode,
+                    selectedFigure: selectedFigure,
+                    gameId: currentGameId,
+                    totalPrize: totalPrize,
+                    gameStarted: gameStarted,
+                    paymentConfig: configData ? configData.methods : []
+                }
+            });
+        });
+    });
 });

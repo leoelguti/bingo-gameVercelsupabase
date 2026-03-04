@@ -250,6 +250,13 @@ function initSocket() {
         if (status === 'SUBSCRIBED') {
             console.log('[PLAYER] Conectado a Supabase Broadcast Channel');
             setConnectionStatus(true);
+
+            // Solicitar sync del estado actual al animador
+            bingoChannel.send({
+                type: 'broadcast',
+                event: 'request-sync',
+                payload: {}
+            });
         } else {
             setConnectionStatus(false);
         }
@@ -266,11 +273,19 @@ function initSocket() {
         salesLocked = false;
         markingMode = 'auto';
         manualMarks = {};
+        gamePaused = false;
+        totalPrize = 0;
+        if (data.gameMode) currentGameMode = data.gameMode;
+        if (data.selectedFigure) currentSelectedFigure = data.selectedFigure;
+        if (data.gameId) currentGameId = data.gameId;
         updateCartBar();
         closePaymentModal();
         renderStore();
         renderMyCards();
         updateStats();
+        updatePrizeDisplay();
+        updateSingButtons();
+        resetBallDisplay();
         showToast('El animador generó nuevos cartones. ¡Ve a la tienda!', 'info');
     });
 
@@ -283,7 +298,7 @@ function initSocket() {
             card.reservedAt = data.reservedAt;
         }
 
-        if (data.buyer === playerName) {
+        if (data.buyer === playerName || data.buyerDbName === playerName) {
             myCards.add(String(data.serial));
             myCardStatuses[data.serial] = data.status || 'reserved';
             // Quitar de seleccionados (ya se reservó)
@@ -304,7 +319,7 @@ function initSocket() {
             card.buyer = null;
         }
 
-        if (data.buyer === playerName) {
+        if (data.buyer === playerName || data.buyerDbName === playerName) {
             myCards.delete(String(data.serial));
             delete myCardStatuses[data.serial];
 
@@ -367,7 +382,7 @@ function initSocket() {
         myCards.clear();
         myCardStatuses = {};
         allCards.forEach(c => {
-            if (c.buyer === playerName) {
+            if (c.buyer === playerName || c.buyer_name === playerName) {
                 myCards.add(String(c.serial));
                 myCardStatuses[c.serial] = c.status || 'confirmed';
             }
@@ -490,7 +505,7 @@ function initSocket() {
         cardPrice = data.cardPrice || 0;
 
         allCards.forEach(c => {
-            if (c.buyer === playerName) {
+            if (c.buyer === playerName || c.buyer_name === playerName) {
                 myCards.add(String(c.serial));
                 myCardStatuses[c.serial] = c.status || 'reserved';
             }
@@ -511,6 +526,16 @@ function initSocket() {
         if (data.paymentConfig) {
             animatorPaymentConfig = data.paymentConfig;
             updatePaymentConfigDisplay();
+        }
+
+        // Cargar gameStarted y totalPrize del sync
+        if (data.gameStarted) {
+            salesLocked = true;
+            totalPrize = data.totalPrize || 0;
+            if (data.gameId) currentGameId = data.gameId;
+            if (data.selectedFigure) currentSelectedFigure = data.selectedFigure;
+            updatePrizeDisplay();
+            updateSingButtons();
         }
 
         renderStore();
@@ -554,12 +579,16 @@ async function loadInitialState() {
             // Verificar si la partida ya comenzó
             if (stateData.gameStarted) {
                 salesLocked = true;
+                totalPrize = stateData.totalPrize || 0;
+                updatePrizeDisplay();
             }
 
             if (stateData.currentNumber) {
                 updateBallDisplay(stateData.currentNumber, stateData.lastBalls || [], stateData.ballCount || 0);
             }
-            currentGameMode = stateData.gameMode;
+            if (stateData.gameMode) currentGameMode = stateData.gameMode;
+            if (stateData.selectedFigure) currentSelectedFigure = stateData.selectedFigure;
+            if (stateData.currentGameId) currentGameId = stateData.currentGameId;
             const modeDisplay = document.getElementById('gameModeDisplay');
             if (stateData.gameMode === 'figure') modeDisplay.textContent = 'Figura';
             else if (stateData.gameMode === 'line') modeDisplay.textContent = 'Línea';
@@ -1118,7 +1147,7 @@ document.getElementById('cancelReservationBtn').addEventListener('click', async 
             bingoChannel.send({
                 type: 'broadcast',
                 event: 'card-released',
-                payload: { serial }
+                payload: { serial, buyer: playerName, buyerDbName: playerName, buyerName: playerDisplayName }
             });
         }
 
@@ -1337,10 +1366,27 @@ function updatePaymentConfigDisplay() {
     const infoBox = document.getElementById('paymentConfigInfo');
     if (!infoBox) return;
 
-    if (animatorPaymentConfig.bank || animatorPaymentConfig.phone || animatorPaymentConfig.cedula) {
-        document.getElementById('payConfigInfoBank').textContent = animatorPaymentConfig.bank || '—';
-        document.getElementById('payConfigInfoPhone').textContent = animatorPaymentConfig.phone || '—';
-        document.getElementById('payConfigInfoCedula').textContent = animatorPaymentConfig.cedula || '—';
+    // animatorPaymentConfig puede ser un array (de Supabase) o un objeto (de broadcast)
+    let bank = '', phone = '', cedula = '';
+
+    if (Array.isArray(animatorPaymentConfig)) {
+        // Formato array de Supabase: [{type:'pago_movil', telefono:'...', cedula:'...'}, {type:'transferencia', banco:'...', cuenta:'...', cedula:'...'}]
+        animatorPaymentConfig.forEach(m => {
+            if (m.banco) bank = m.banco;
+            if (m.cuenta && !bank) bank = m.cuenta;
+            if (m.telefono) phone = m.telefono;
+            if (m.cedula && !cedula) cedula = m.cedula;
+        });
+    } else if (animatorPaymentConfig && typeof animatorPaymentConfig === 'object') {
+        bank = animatorPaymentConfig.bank || '';
+        phone = animatorPaymentConfig.phone || '';
+        cedula = animatorPaymentConfig.cedula || '';
+    }
+
+    if (bank || phone || cedula) {
+        document.getElementById('payConfigInfoBank').textContent = bank || '—';
+        document.getElementById('payConfigInfoPhone').textContent = phone || '—';
+        document.getElementById('payConfigInfoCedula').textContent = cedula || '—';
         infoBox.classList.remove('hidden');
     } else {
         infoBox.classList.add('hidden');
