@@ -48,6 +48,7 @@ CREATE TABLE public.bingo_winners (
     game_id text,
     payment_status text DEFAULT 'pending',
     winner_payment_data jsonb,
+    amount numeric DEFAULT 0,
     created_at timestamp with time zone DEFAULT now()
 );
 

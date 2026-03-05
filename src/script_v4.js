@@ -665,7 +665,7 @@ function recalculatePrizes() {
 }
 
 // Generar cartones
-function generateCards() {
+async function generateCards() {
     const container = document.getElementById('bingoCards');
     container.innerHTML = '';
 
@@ -696,6 +696,17 @@ function generateCards() {
 
     numberPool = new BingoNumberPool();
     totalPrize = cardCount * cardPrice; // Calcular el premio total
+
+    // Cargar el máximo serial existente de la BD para no repetir
+    try {
+        const { data: existingCards } = await supabaseClient.from('bingo_cards').select('serial');
+        if (existingCards && existingCards.length > 0) {
+            const maxSerial = Math.max(...existingCards.map(c => parseInt(c.serial) || 0));
+            if (maxSerial >= nextCardSerial) {
+                nextCardSerial = maxSerial + 1;
+            }
+        }
+    } catch (e) { console.warn('Error cargando max serial:', e); }
 
     const cardsData = [];
 
@@ -1558,14 +1569,23 @@ function showGameEndedModal(data) {
     const modal = document.getElementById('gameEndedOverlay');
     if (!modal) return;
 
+    const pot = data.totalPrize || 0;
     const winnersHtml = (data.winners || []).map(w => {
         let icon = 'award', color = 'text-emerald-400';
-        if (w.prizeType && w.prizeType.includes('Figura')) { icon = 'star'; color = 'text-blue-400'; }
-        else if (w.prizeType && w.prizeType.includes('Línea')) { icon = 'medal'; color = 'text-orange-400'; }
-        return `<div class="flex items-center gap-2 p-2 rounded-lg bg-white/5 border border-white/10">
-            <i data-lucide="${icon}" class="w-4 h-4 ${color}"></i>
-            <span class="text-white font-bold text-sm">#${w.cardIndex || w.cardSerial || '?'}</span>
-            <span class="text-xs ${color} font-bold uppercase">${w.prizeType || '?'}</span>
+        let amount = 0;
+        if (w.prizeType && w.prizeType.includes('Figura')) { icon = 'star'; color = 'text-blue-400'; amount = pot * 0.10; }
+        else if (w.prizeType && w.prizeType.includes('Línea')) { icon = 'medal'; color = 'text-orange-400'; amount = pot * 0.20; }
+        else if (w.prizeType && w.prizeType.includes('Bingo')) { icon = 'award'; color = 'text-emerald-400'; amount = pot * 0.50; }
+        return `<div class="flex items-center justify-between gap-2 p-2 rounded-lg bg-white/5 border border-white/10">
+            <div class="flex items-center gap-2">
+                <i data-lucide="${icon}" class="w-4 h-4 ${color}"></i>
+                <span class="text-white font-bold text-sm">#${w.cardIndex || w.cardSerial || '?'}</span>
+                <span class="text-gray-300 text-xs">${w.playerName || 'Anónimo'}</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-xs ${color} font-bold uppercase">${w.prizeType || '?'}</span>
+                <span class="text-yellow-400 font-bold text-sm">$${amount.toFixed(2)}</span>
+            </div>
         </div>`;
     }).join('');
 
@@ -1574,7 +1594,7 @@ function showGameEndedModal(data) {
             <span style="font-size: 2rem;">🏆</span>
         </div>
         <h2 class="text-2xl font-bold text-white mb-1 font-display">¡Partida Finalizada!</h2>
-        <p class="text-sm text-gray-400 mb-4">ID: ${data.gameId || currentGameId} — Pote: $${(data.totalPrize || 0).toFixed(2)}</p>
+        <p class="text-sm text-gray-400 mb-4">ID: ${data.gameId || currentGameId} — Pote: $${pot.toFixed(2)}</p>
         <div class="mb-4">
             <h4 class="text-xs text-yellow-400 uppercase tracking-wider mb-2 font-bold">Ganadores de esta ronda</h4>
             <div class="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">${winnersHtml || '<p class="text-gray-500 text-sm italic">No hubo ganadores.</p>'}</div>
@@ -1676,20 +1696,68 @@ function renderWinnersHistoryContent() {
 function openWinnerPaymentForm(gameId, cardSerial, mode) {
     const modal = document.getElementById('winnerPaymentFormOverlay');
     if (!modal) return;
+
+    // Buscar datos del ganador en cache
+    const winner = allTimeWinnersCache.find(w => w.cardIndex === cardSerial && w.prizeType === mode && w.gameId === gameId);
+    const payData = winner?.winnerPaymentData || {};
+    const playerName = winner?.playerName || 'Anónimo';
+
+    // Calcular monto basado en el tipo de premio y pote
+    let amount = 0;
+    if (mode.includes('Figura')) amount = totalPrize * 0.10;
+    else if (mode.includes('Línea')) amount = totalPrize * 0.20;
+    else if (mode.includes('Bingo')) amount = totalPrize * 0.50;
+
     document.getElementById('wpfGameId').textContent = gameId;
     document.getElementById('wpfCardSerial').textContent = '#' + cardSerial;
     document.getElementById('wpfMode').textContent = mode;
-    document.getElementById('wpfAmount').value = '';
-    document.getElementById('wpfName').value = '';
-    document.getElementById('wpfCedula').value = '';
-    document.getElementById('wpfBank').value = '';
-    document.getElementById('wpfPhone').value = '';
-    document.getElementById('wpfMethod').value = 'pago_movil';
+
+    // Mostrar datos enviados por el jugador (o mensaje si aún no llegan)
+    const wpfDataContainer = document.getElementById('wpfDataContainer');
+    if (payData.name) {
+        wpfDataContainer.innerHTML = `
+            <div class="grid grid-cols-2 gap-2 text-sm">
+                <div class="p-2 rounded-lg bg-white/5 border border-white/10">
+                    <span class="text-gray-400 text-xs uppercase">Nombre</span>
+                    <p class="text-white font-bold">${payData.name}</p>
+                </div>
+                <div class="p-2 rounded-lg bg-white/5 border border-white/10">
+                    <span class="text-gray-400 text-xs uppercase">Cédula</span>
+                    <p class="text-white font-bold">${payData.cedula || '—'}</p>
+                </div>
+                <div class="p-2 rounded-lg bg-white/5 border border-white/10">
+                    <span class="text-gray-400 text-xs uppercase">Banco</span>
+                    <p class="text-white font-bold">${payData.bank || '—'}</p>
+                </div>
+                <div class="p-2 rounded-lg bg-white/5 border border-white/10">
+                    <span class="text-gray-400 text-xs uppercase">Teléfono</span>
+                    <p class="text-white font-bold">${payData.phone || '—'}</p>
+                </div>
+                <div class="p-2 rounded-lg bg-white/5 border border-white/10">
+                    <span class="text-gray-400 text-xs uppercase">Método</span>
+                    <p class="text-white font-bold">${payData.method || '—'}</p>
+                </div>
+                <div class="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                    <span class="text-emerald-400 text-xs uppercase">Monto</span>
+                    <p class="text-emerald-300 font-bold text-lg">$${amount.toFixed(2)}</p>
+                </div>
+            </div>
+        `;
+    } else {
+        wpfDataContainer.innerHTML = `
+            <div class="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20 text-center">
+                <p class="text-amber-400 text-sm">⏳ El jugador aún no ha enviado sus datos de pago.</p>
+                <p class="text-gray-400 text-xs mt-1">Jugador: ${playerName} — Monto: $${amount.toFixed(2)}</p>
+            </div>
+        `;
+    }
 
     // Store context
     modal.dataset.gameId = gameId;
     modal.dataset.cardSerial = cardSerial;
     modal.dataset.mode = mode;
+    modal.dataset.amount = amount;
+    modal.dataset.playerName = playerName;
 
     modal.classList.remove('hidden');
     if (window.lucide) window.lucide.createIcons();
@@ -1705,36 +1773,43 @@ async function submitWinnerPayment() {
     const gameId = modal.dataset.gameId;
     const cardSerial = modal.dataset.cardSerial;
     const mode = modal.dataset.mode;
-    const amount = parseFloat(document.getElementById('wpfAmount').value) || 0;
-    const name = document.getElementById('wpfName').value.trim();
-    const cedula = document.getElementById('wpfCedula').value.trim();
-    const bank = document.getElementById('wpfBank').value.trim();
-    const phone = document.getElementById('wpfPhone').value.trim();
-    const method = document.getElementById('wpfMethod').value;
+    const amount = parseFloat(modal.dataset.amount) || 0;
+    const playerName = modal.dataset.playerName || '';
 
-    if (!name || !amount) {
-        showMessage('Complete al menos nombre y monto.');
-        return;
-    }
+    supabaseClient.from('bingo_winners')
+        .update({ payment_status: 'paid', amount: amount })
+        .eq('card_index', cardSerial)
+        .eq('prize_type', mode)
+        .then(({ error }) => {
+            if (!error) {
+                showMessage(`✅ Pago de $${amount.toFixed(2)} registrado para cartón #${cardSerial}.`);
+                closeWinnerPaymentForm();
+                renderWinnersHistoryContent();
 
-    supabaseClient.from('bingo_winners').update({ payment_status: 'paid' }).eq('card_index', cardSerial).eq('prize_type', mode).then(({ error }) => {
-        if (!error) {
-            showMessage(`✅ Pago de $${amount} registrado para cartón #${cardSerial}.`);
-            closeWinnerPaymentForm();
-        } else {
-            showMessage('Error al registrar pago en base de datos.');
-            console.error('Error:', error);
-        }
-    });
+                // Notificar al jugador que se le pagó
+                bingoChannel.send({
+                    type: 'broadcast',
+                    event: 'winner-paid',
+                    payload: {
+                        cardSerial,
+                        prizeType: mode,
+                        amount,
+                        playerName,
+                        gameId
+                    }
+                });
+            } else {
+                showMessage('Error al registrar pago en base de datos.');
+                console.error('Error:', error);
+            }
+        });
 }
 
 // Escuchar eventos de jugadores
 bingoChannel.on('broadcast', { event: 'player-claims-win' }, (event) => {
     const data = event.payload;
-    // Notificación visual al animador
-    showMessage(`¡ALERTA! El jugador "${data.playerName}" canta ${data.claimType} con el cartón #${data.cardSerial}. ¡Verifica!`);
 
-    // El propio animador pausa automáticamente el juego para todos al recibir un claim
+    // Pausar el juego para todos
     bingoChannel.send({
         type: 'broadcast',
         event: 'game-paused',
@@ -1744,12 +1819,72 @@ bingoChannel.on('broadcast', { event: 'player-claims-win' }, (event) => {
             claimType: data.claimType
         }
     });
+
+    // Mostrar modal de verificación al animador
+    showClaimVerificationModal(data);
 });
 
-bingoChannel.on('broadcast', { event: 'claim-result' }, (event) => {
-    // Escuchar el resultado emitido por otro animador (si hubiera varios en la misma sala)
-    // Opcionalmente podemos actualizar la interfaz si el resultado del claim es valido
-});
+// ============================================================
+// Claim Verification Modal — Animador valida o rechaza cantos
+// ============================================================
+function showClaimVerificationModal(data) {
+    let overlay = document.getElementById('claimVerifyOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'claimVerifyOverlay';
+        overlay.className = 'fixed inset-0 z-[400] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4';
+        overlay.style.animation = 'fadeIn 0.3s ease';
+        document.body.appendChild(overlay);
+    }
+
+    let iconEmoji = '🎤', borderColor = 'border-yellow-500/40', gradient = 'from-yellow-500 to-amber-600';
+    if (data.claimType === 'Bingo') { iconEmoji = '🏆'; borderColor = 'border-emerald-500/40'; gradient = 'from-emerald-500 to-green-600'; }
+    else if (data.claimType === 'Línea') { iconEmoji = '🏅'; borderColor = 'border-orange-500/40'; gradient = 'from-orange-500 to-amber-600'; }
+    else if (data.claimType === 'Figura') { iconEmoji = '⭐'; borderColor = 'border-blue-500/40'; gradient = 'from-blue-500 to-indigo-600'; }
+
+    overlay.innerHTML = `
+        <div class="max-w-md w-full bg-slate-900/95 border ${borderColor} rounded-2xl p-6 shadow-2xl text-center">
+            <div class="w-16 h-16 bg-gradient-to-br ${gradient} rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg" style="animation: pulse 1.5s infinite;">
+                <span style="font-size: 2rem;">${iconEmoji}</span>
+            </div>
+            <h2 class="text-xl font-bold text-white mb-1 font-display">¡Canto Recibido!</h2>
+            <p class="text-yellow-400 font-bold text-lg mb-1">${data.playerName}</p>
+            <p class="text-gray-400 text-sm mb-4">Canta <span class="text-white font-bold">${data.claimType}</span> con el cartón <span class="text-white font-bold">#${data.cardSerial}</span></p>
+            <p class="text-gray-500 text-xs mb-6">Verifica el cartón y confirma si el canto es válido.</p>
+            <div class="flex gap-3">
+                <button onclick="resolveClaimVerification(true, '${data.playerName}', '${data.claimType}', '${data.cardSerial}')" 
+                    class="flex-1 bg-gradient-to-r from-emerald-600 to-green-600 text-white font-bold py-3 px-4 rounded-xl shadow-lg hover:shadow-emerald-500/30 transition-all flex items-center justify-center gap-2">
+                    <i data-lucide="check-circle" class="w-5 h-5"></i> Validar
+                </button>
+                <button onclick="resolveClaimVerification(false, '${data.playerName}', '${data.claimType}', '${data.cardSerial}')" 
+                    class="flex-1 bg-gradient-to-r from-red-600 to-rose-600 text-white font-bold py-3 px-4 rounded-xl shadow-lg hover:shadow-red-500/30 transition-all flex items-center justify-center gap-2">
+                    <i data-lucide="x-circle" class="w-5 h-5"></i> Rechazar
+                </button>
+            </div>
+        </div>
+    `;
+
+    if (window.lucide) window.lucide.createIcons();
+}
+
+function resolveClaimVerification(valid, playerName, claimType, cardSerial) {
+    // Cerrar modal
+    const overlay = document.getElementById('claimVerifyOverlay');
+    if (overlay) overlay.remove();
+
+    // Emitir resultado a todos los jugadores
+    bingoChannel.send({
+        type: 'broadcast',
+        event: 'claim-result',
+        payload: { valid, playerName, claimType, cardSerial }
+    });
+
+    if (valid) {
+        showMessage(`✅ Canto de "${playerName}" (${claimType}, cartón #${cardSerial}) VALIDADO.`);
+    } else {
+        showMessage(`❌ Canto de "${playerName}" (${claimType}, cartón #${cardSerial}) RECHAZADO. El juego continúa.`);
+    }
+}
 
 // ============================================================
 // updateTotalPot — Recalcula el pote basado en cartones confirmados
@@ -1770,17 +1905,25 @@ bingoChannel.on('broadcast', { event: 'winner-payment-data' }, (event) => {
     const data = event.payload;
     showMessage(`✉️ Datos de pago recibidos de "${data.playerName}" para la partida ${data.gameId || ''}.`);
 
+    // Actualizar cache local con los datos del jugador
+    const winnerEntry = allTimeWinnersCache.find(w =>
+        w.cardIndex === String(data.cardSerial) && w.prizeType === data.prizeType && w.gameId === data.gameId
+    );
+    if (winnerEntry) {
+        winnerEntry.winnerPaymentData = data.paymentData;
+    }
+
     // Guardar en bingo_winners
     if (data.cardSerial && data.prizeType) {
         supabaseClient.from('bingo_winners')
-            .update({ winner_payment_data: data.paymentData })
+            .update({ winner_payment_data: data.paymentData, amount: data.amount || 0 })
             .eq('card_index', String(data.cardSerial))
             .eq('prize_type', data.prizeType)
             .then(({ error }) => {
                 if (error) console.error('Error guardando datos de pago del ganador:', error);
+                else renderWinnersHistoryContent();
             });
     } else if (data.gameId) {
-        // Fallback: guardar por game_id y player_name
         supabaseClient.from('bingo_winners')
             .update({ winner_payment_data: data.paymentData })
             .eq('game_id', data.gameId)
@@ -1788,6 +1931,7 @@ bingoChannel.on('broadcast', { event: 'winner-payment-data' }, (event) => {
             .is('winner_payment_data', null)
             .then(({ error }) => {
                 if (error) console.error('Error guardando datos de pago del ganador:', error);
+                else renderWinnersHistoryContent();
             });
     }
 });

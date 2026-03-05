@@ -182,7 +182,7 @@ function enterGame(user) {
     setTimeout(() => {
         loginScreen.style.display = 'none';
         gameView.classList.remove('hidden');
-        initSocket();
+        initBroadcast();
         loadInitialState();
     }, 400);
 }
@@ -243,9 +243,9 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ============================================================
-// Socket.IO Connection
+// Supabase Broadcast Connection
 // ============================================================
-function initSocket() {
+function initBroadcast() {
     bingoChannel.subscribe((status) => {
         if (status === 'SUBSCRIBED') {
             console.log('[PLAYER] Conectado a Supabase Broadcast Channel');
@@ -426,12 +426,11 @@ function initSocket() {
 
     bingoChannel.on('broadcast', { event: 'winner-announced' }, (ev) => {
         const data = ev.payload;
+        hideClaimOverlay(); // Cerrar overlay de verificación si estaba abierto
         const isMyCard = myCards.has(String(data.cardIndex));
         if (isMyCard) {
             showToast(`🎉 ¡FELICIDADES! Tu cartón #${data.cardIndex} ganó ${data.prizeType}!`, 'success');
             markCardAsWinner(data.cardIndex, data.prizeType);
-            // Show payment data form for the winning player
-            showWinnerPaymentDataModal(data.cardIndex, data.prizeType, data.gameId || currentGameId);
         } else {
             showToast(`Cartón #${data.cardIndex} ganó ${data.prizeType}.`, 'warning');
         }
@@ -471,6 +470,14 @@ function initSocket() {
         hideClaimOverlay();
         gamePaused = false;
         showPlayerGameEndedModal(data);
+    });
+
+    // === WINNER-PAID: Animador registró el pago del premio ===
+    bingoChannel.on('broadcast', { event: 'winner-paid' }, (ev) => {
+        const data = ev.payload;
+        if (myCards.has(String(data.cardSerial))) {
+            showToast(`💰 ¡Tu premio de $${(data.amount || 0).toFixed(2)} por ${data.prizeType} (cartón #${data.cardSerial}) fue registrado como PAGADO!`, 'success');
+        }
     });
 
     // === GAME-BREAK: Receso ===
@@ -1678,81 +1685,99 @@ function showPlayerGameEndedModal(data) {
         overlay.style.cssText = `
             position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,0.85);
             backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center;
-            animation: fadeIn 0.3s ease; padding: 20px;
+            animation: fadeIn 0.3s ease; padding: 20px; overflow-y: auto;
         `;
         document.body.appendChild(overlay);
     }
 
+    const pot = data.totalPrize || 0;
     const winners = data.winners || [];
-    // Check if any of player's cards are in the winners list
-    const isWinner = winners.some(w => {
-        const serial = String(w.cardIndex || w.cardSerial || '');
-        return myCards.has(serial);
-    });
 
-    // Find the winning cards of this player specifically
+    // Find this player's winning cards
     const myWinningCards = winners.filter(w => {
         const serial = String(w.cardIndex || w.cardSerial || '');
         return myCards.has(serial);
     });
 
+    // Build winners list with names and amounts
     let winnersHtml = winners.map(w => {
         let icon = '🏆', color = '#34d399';
-        if (w.prizeType && w.prizeType.includes('Figura')) { icon = '⭐'; color = '#60a5fa'; }
-        else if (w.prizeType && w.prizeType.includes('Línea')) { icon = '🏅'; color = '#fb923c'; }
-        return `<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;">
-            <span style="font-size: 1.2rem;">${icon}</span>
-            <span style="color: white; font-weight: 700; font-size: 0.85rem;">#${w.cardIndex || w.cardSerial || '?'}</span>
-            <span style="color: ${color}; font-weight: 700; font-size: 0.75rem; text-transform: uppercase;">${w.prizeType || '?'}</span>
+        let amount = 0;
+        if (w.prizeType && w.prizeType.includes('Figura')) { icon = '⭐'; color = '#60a5fa'; amount = pot * 0.10; }
+        else if (w.prizeType && w.prizeType.includes('Línea')) { icon = '🏅'; color = '#fb923c'; amount = pot * 0.20; }
+        else if (w.prizeType && w.prizeType.includes('Bingo')) { icon = '🏆'; color = '#34d399'; amount = pot * 0.50; }
+        const serial = w.cardIndex || w.cardSerial || '?';
+        const isMine = myCards.has(String(serial));
+        return `<div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background: rgba(255,255,255,0.05);
+            border: 1px solid ${isMine ? 'rgba(52,211,153,0.4)' : 'rgba(255,255,255,0.1)'}; border-radius: 8px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="font-size: 1.1rem;">${icon}</span>
+                <span style="color: white; font-weight: 700; font-size: 0.85rem;">#${serial}</span>
+                <span style="color: ${color}; font-weight: 700; font-size: 0.7rem; text-transform: uppercase;">${w.prizeType || '?'}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="color: ${color}; font-weight: 700; font-size: 0.85rem;">$${amount.toFixed(2)}</span>
+                ${isMine ? '<span style="background: linear-gradient(135deg, #059669, #10b981); color: white; font-weight: 700; padding: 2px 8px; border-radius: 6px; font-size: 0.65rem;">TÚ</span>' : ''}
+            </div>
         </div>`;
     }).join('');
 
-    let winnerPaymentFormHtml = '';
-    if (isWinner) {
-        winnerPaymentFormHtml = `
-            <div style="margin-top: 16px; background: linear-gradient(135deg, rgba(52,211,153,0.15), rgba(16,185,129,0.05));
+    // Build payment form for EACH winning card of this player
+    let paymentFormsHtml = '';
+    if (myWinningCards.length > 0) {
+        paymentFormsHtml = myWinningCards.map((w, idx) => {
+            const serial = w.cardIndex || w.cardSerial || '';
+            const prizeType = w.prizeType || '?';
+            let amount = 0;
+            if (prizeType.includes('Figura')) amount = pot * 0.10;
+            else if (prizeType.includes('Línea')) amount = pot * 0.20;
+            else if (prizeType.includes('Bingo')) amount = pot * 0.50;
+
+            return `
+            <div style="margin-top: 12px; background: linear-gradient(135deg, rgba(52,211,153,0.15), rgba(16,185,129,0.05));
                 border: 1px solid rgba(52,211,153,0.3); border-radius: 12px; padding: 16px; text-align: left;">
-                <h4 style="color: #34d399; font-weight: 700; font-size: 0.85rem; text-transform: uppercase; margin-bottom: 12px;
+                <h4 style="color: #34d399; font-weight: 700; font-size: 0.85rem; text-transform: uppercase; margin-bottom: 4px;
                     letter-spacing: 0.05em; display: flex; align-items: center; gap: 6px;">
-                    🎉 \u00a1Felicidades! Ingresa tus datos para el pago del premio
+                    🎉 ¡Felicidades! Cartón #${serial}
                 </h4>
+                <p style="color: #9ca3af; font-size: 0.75rem; margin-bottom: 12px;">Premio: ${prizeType} — Monto: <span style="color: #34d399; font-weight: 700;">$${amount.toFixed(2)}</span></p>
+                <p style="color: #d1d5db; font-size: 0.75rem; margin-bottom: 8px;">Ingresa tus datos para recibir el pago:</p>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                    <input type="text" id="winnerDataName" placeholder="Tu nombre completo" style="width: 100%; padding: 8px 12px;
+                    <input type="text" id="wd_name_${serial}" placeholder="Tu nombre completo" style="width: 100%; padding: 8px 12px;
                         background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: white;
-                        font-size: 0.8rem; outline: none;">
-                    <input type="text" id="winnerDataCedula" placeholder="C\u00e9dula V-12345678" style="width: 100%; padding: 8px 12px;
+                        font-size: 0.8rem; outline: none; box-sizing: border-box;">
+                    <input type="text" id="wd_cedula_${serial}" placeholder="Cédula V-12345678" style="width: 100%; padding: 8px 12px;
                         background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: white;
-                        font-size: 0.8rem; outline: none;">
-                    <input type="text" id="winnerDataBank" placeholder="Banco receptor" style="width: 100%; padding: 8px 12px;
+                        font-size: 0.8rem; outline: none; box-sizing: border-box;">
+                    <input type="text" id="wd_bank_${serial}" placeholder="Banco receptor" style="width: 100%; padding: 8px 12px;
                         background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: white;
-                        font-size: 0.8rem; outline: none;">
-                    <input type="tel" id="winnerDataPhone" placeholder="Tel\u00e9fono 04XX..." style="width: 100%; padding: 8px 12px;
+                        font-size: 0.8rem; outline: none; box-sizing: border-box;">
+                    <input type="tel" id="wd_phone_${serial}" placeholder="Teléfono 04XX..." style="width: 100%; padding: 8px 12px;
                         background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: white;
-                        font-size: 0.8rem; outline: none;">
+                        font-size: 0.8rem; outline: none; box-sizing: border-box;">
                 </div>
-                <button onclick="submitWinnerPaymentData()" style="width: 100%; margin-top: 10px; padding: 10px; border-radius: 10px;
+                <button onclick="submitWinnerPaymentData('${serial}', '${prizeType.replace(/'/g, "\\'")}', ${amount})" style="width: 100%; margin-top: 10px; padding: 10px; border-radius: 10px;
                     background: linear-gradient(135deg, #059669, #10b981); color: white; font-weight: 700; border: none;
                     cursor: pointer; font-size: 0.85rem; transition: all 0.2s;">
                     ✅ Enviar Datos de Pago
                 </button>
-            </div>
-        `;
+            </div>`;
+        }).join('');
     }
 
     overlay.innerHTML = `
-        <div style="text-align: center; max-width: 450px; width: 100%; background: rgba(15,23,42,0.95);
+        <div style="text-align: center; max-width: 480px; width: 100%; background: rgba(15,23,42,0.95);
             border: 1px solid rgba(234,179,8,0.4); border-radius: 16px; padding: 24px;
-            box-shadow: 0 0 40px rgba(234,179,8,0.15);">
+            box-shadow: 0 0 40px rgba(234,179,8,0.15); max-height: 90vh; overflow-y: auto;">
             <div style="width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, #f59e0b, #d97706);
                 display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;
                 box-shadow: 0 0 25px rgba(245,158,11,0.4);">
                 <span style="font-size: 1.8rem;">🏆</span>
             </div>
             <h2 style="color: white; font-size: 1.4rem; font-weight: 700; margin-bottom: 4px; font-family: 'Outfit', sans-serif;">
-                \u00a1Partida Finalizada!
+                ¡Partida Finalizada!
             </h2>
-            <p style="color: #9ca3af; font-size: 0.8rem; margin-bottom: 16px;">Pote: $${(data.totalPrize || 0).toFixed(2)}</p>
+            <p style="color: #9ca3af; font-size: 0.8rem; margin-bottom: 16px;">Pote: $${pot.toFixed(2)}</p>
             <div style="margin-bottom: 12px;">
                 <h4 style="color: #fbbf24; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
                     margin-bottom: 8px;">Ganadores</h4>
@@ -1760,7 +1785,7 @@ function showPlayerGameEndedModal(data) {
                     ${winnersHtml || '<p style="color: #6b7280; font-size: 0.85rem; font-style: italic;">No hubo ganadores.</p>'}
                 </div>
             </div>
-            ${winnerPaymentFormHtml}
+            ${paymentFormsHtml}
             <button onclick="document.getElementById('playerGameEndedOverlay').remove();"
                 style="margin-top: 16px; padding: 10px 24px; border-radius: 10px; background: rgba(255,255,255,0.1);
                 border: 1px solid rgba(255,255,255,0.2); color: white; font-weight: 600; cursor: pointer;
@@ -1771,11 +1796,11 @@ function showPlayerGameEndedModal(data) {
     `;
 }
 
-function submitWinnerPaymentData() {
-    const name = document.getElementById('winnerDataName')?.value.trim();
-    const cedula = document.getElementById('winnerDataCedula')?.value.trim();
-    const bank = document.getElementById('winnerDataBank')?.value.trim();
-    const phone = document.getElementById('winnerDataPhone')?.value.trim();
+function submitWinnerPaymentData(cardSerial, prizeType, amount) {
+    const name = document.getElementById(`wd_name_${cardSerial}`)?.value.trim();
+    const cedula = document.getElementById(`wd_cedula_${cardSerial}`)?.value.trim();
+    const bank = document.getElementById(`wd_bank_${cardSerial}`)?.value.trim();
+    const phone = document.getElementById(`wd_phone_${cardSerial}`)?.value.trim();
 
     if (!name) {
         showToast('Por favor ingresa tu nombre.', 'warning');
@@ -1788,130 +1813,20 @@ function submitWinnerPaymentData() {
         payload: {
             playerName: playerDisplayName,
             gameId: currentGameId,
+            cardSerial: String(cardSerial),
+            prizeType,
+            amount,
             paymentData: { name, cedula, bank, phone }
         }
     });
 
-    showToast('✅ Datos enviados. El animador te contactar\u00e1 para el pago.', 'success');
-    const overlay = document.getElementById('playerGameEndedOverlay');
-    if (overlay) overlay.remove();
-}
-
-// ============================================================
-// Winner Payment Data Modal — shown immediately when player wins
-// ============================================================
-function showWinnerPaymentDataModal(cardSerial, prizeType, gameId) {
-    let overlay = document.getElementById('winnerPayDataOverlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = 'winnerPayDataOverlay';
-        overlay.style.cssText = `
-            position: fixed; inset: 0; z-index: 310; background: rgba(0,0,0,0.85);
-            backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center;
-            animation: fadeIn 0.3s ease; padding: 20px;
-        `;
-        document.body.appendChild(overlay);
-    }
-
-    let iconEmoji = '🏆', borderColor = 'rgba(52,211,153,0.4)', gradientFrom = '#059669', gradientTo = '#10b981';
-    if (prizeType.includes('Figura')) { iconEmoji = '⭐'; borderColor = 'rgba(96,165,250,0.4)'; gradientFrom = '#3b82f6'; gradientTo = '#60a5fa'; }
-    else if (prizeType.includes('Línea')) { iconEmoji = '🏅'; borderColor = 'rgba(251,146,60,0.4)'; gradientFrom = '#d97706'; gradientTo = '#f59e0b'; }
-
-    overlay.innerHTML = `
-        <div style="text-align: center; max-width: 420px; width: 100%; background: rgba(15,23,42,0.95);
-            border: 1px solid ${borderColor}; border-radius: 16px; padding: 24px;
-            box-shadow: 0 0 40px rgba(0,0,0,0.3);">
-            <div style="width: 64px; height: 64px; border-radius: 50%; background: linear-gradient(135deg, ${gradientFrom}, ${gradientTo});
-                display: flex; align-items: center; justify-content: center; margin: 0 auto 12px;
-                box-shadow: 0 0 25px rgba(0,0,0,0.3);">
-                <span style="font-size: 1.8rem;">${iconEmoji}</span>
-            </div>
-            <h2 style="color: white; font-size: 1.3rem; font-weight: 700; margin-bottom: 4px; font-family: 'Outfit', sans-serif;">
-                ¡Felicidades! Ganaste ${prizeType}
-            </h2>
-            <p style="color: #9ca3af; font-size: 0.8rem; margin-bottom: 16px;">
-                Cartón #${cardSerial} — Ingresa tus datos para recibir el pago del premio
-            </p>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: left; margin-bottom: 12px;">
-                <div style="grid-column: 1 / -1;">
-                    <label style="font-size: 0.7rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;">Nombre completo *</label>
-                    <input type="text" id="wpd_name_${cardSerial}" placeholder="Tu nombre completo" style="width: 100%; padding: 10px 12px;
-                        background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; color: white;
-                        font-size: 0.85rem; outline: none; box-sizing: border-box; margin-top: 4px;">
-                </div>
-                <div>
-                    <label style="font-size: 0.7rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;">Cédula</label>
-                    <input type="text" id="wpd_cedula_${cardSerial}" placeholder="V-12345678" style="width: 100%; padding: 10px 12px;
-                        background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; color: white;
-                        font-size: 0.85rem; outline: none; box-sizing: border-box; margin-top: 4px;">
-                </div>
-                <div>
-                    <label style="font-size: 0.7rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;">Teléfono</label>
-                    <input type="tel" id="wpd_phone_${cardSerial}" placeholder="04XX-XXXXXXX" style="width: 100%; padding: 10px 12px;
-                        background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; color: white;
-                        font-size: 0.85rem; outline: none; box-sizing: border-box; margin-top: 4px;">
-                </div>
-                <div>
-                    <label style="font-size: 0.7rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;">Banco receptor</label>
-                    <input type="text" id="wpd_bank_${cardSerial}" placeholder="Banesco..." style="width: 100%; padding: 10px 12px;
-                        background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; color: white;
-                        font-size: 0.85rem; outline: none; box-sizing: border-box; margin-top: 4px;">
-                </div>
-                <div>
-                    <label style="font-size: 0.7rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em;">Método de pago</label>
-                    <select id="wpd_method_${cardSerial}" style="width: 100%; padding: 10px 12px;
-                        background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; color: white;
-                        font-size: 0.85rem; outline: none; box-sizing: border-box; margin-top: 4px; appearance: none;">
-                        <option value="pago_movil" style="background: #1e293b;">Pago Móvil</option>
-                        <option value="transferencia" style="background: #1e293b;">Transferencia</option>
-                        <option value="efectivo" style="background: #1e293b;">Efectivo</option>
-                        <option value="otro" style="background: #1e293b;">Otro</option>
-                    </select>
-                </div>
-            </div>
-
-            <div style="display: flex; gap: 8px;">
-                <button onclick="submitWinnerPayDataModal('${cardSerial}', '${prizeType.replace(/'/g, "\\'")}', '${gameId}')"
-                    style="flex: 1; padding: 12px; border-radius: 10px; background: linear-gradient(135deg, ${gradientFrom}, ${gradientTo});
-                    color: white; font-weight: 700; border: none; cursor: pointer; font-size: 0.85rem; transition: all 0.2s;">
-                    ✅ Enviar Datos
-                </button>
-                <button onclick="document.getElementById('winnerPayDataOverlay').remove();"
-                    style="padding: 12px 16px; border-radius: 10px; background: rgba(255,255,255,0.1);
-                    border: 1px solid rgba(255,255,255,0.2); color: white; font-weight: 600; cursor: pointer; font-size: 0.85rem;">
-                    Luego
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-function submitWinnerPayDataModal(cardSerial, prizeType, gameId) {
-    const name = document.getElementById(`wpd_name_${cardSerial}`)?.value.trim();
-    const cedula = document.getElementById(`wpd_cedula_${cardSerial}`)?.value.trim();
-    const phone = document.getElementById(`wpd_phone_${cardSerial}`)?.value.trim();
-    const bank = document.getElementById(`wpd_bank_${cardSerial}`)?.value.trim();
-    const method = document.getElementById(`wpd_method_${cardSerial}`)?.value || 'pago_movil';
-
-    if (!name) {
-        showToast('Por favor ingresa tu nombre.', 'warning');
-        return;
-    }
-
-    bingoChannel.send({
-        type: 'broadcast',
-        event: 'winner-payment-data',
-        payload: {
-            playerName: playerDisplayName,
-            gameId,
-            cardSerial,
-            prizeType,
-            paymentData: { name, cedula, phone, bank, method }
-        }
-    });
-
     showToast('✅ Datos enviados. El animador te contactará para el pago.', 'success');
-    const overlay = document.getElementById('winnerPayDataOverlay');
-    if (overlay) overlay.remove();
+    // Disable the button and show confirmation
+    const btn = event.target;
+    if (btn) {
+        btn.textContent = '✅ Datos Enviados';
+        btn.disabled = true;
+        btn.style.opacity = '0.6';
+        btn.style.cursor = 'default';
+    }
 }
